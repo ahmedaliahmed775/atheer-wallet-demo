@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FinTech Pay</string>
+    <string name="login">Login</string>
+    <string name="signup">Create Account</string>
+    <string name="phone_hint">Phone Number</string>
+    <string name="pin_hint">PIN</string>
+    <string name="transfer">Transfer</string>
+    <string name="bill_payment">Bill Payment</string>
+    <string name="balance">Balance</string>
+    <string name="history">History</string>
+    <string name="settings">Settings</string>
+    <string name="logout">Logout</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="success">Success</string>
+    <string name="error_invalid_credentials">Invalid phone number or PIN</string>
+    <string name="error_insufficient_balance">Insufficient balance</string>
+</resources>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">تطبيق التحويلات</string>
+    <string name="login">تسجيل الدخول</string>
+    <string name="signup">إنشاء حساب</string>
+    <string name="phone_hint">رقم الهاتف</string>
+    <string name="pin_hint">الرمز السري</string>
+    <string name="transfer">حوالة مالية</string>
+    <string name="bill_payment">سداد فواتير</string>
+    <string name="balance">الرصيد</string>
+    <string name="history">السجل</string>
+    <string name="settings">الإعدادات</string>
+    <string name="logout">تسجيل الخروج</string>
+    <string name="confirm">تأكيد</string>
+    <string name="cancel">إلغاء</string>
+    <string name="success">تمت بنجاح</string>
+    <string name="error_invalid_credentials">رقم الهاتف أو الرمز السري غير صحيح</string>
+    <string name="error_insufficient_balance">الرصيد غير كافٍ</string>
+</resources>
