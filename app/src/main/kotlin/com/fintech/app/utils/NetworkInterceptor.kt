@@ -42,6 +42,7 @@ class NetworkInterceptor(private val context: Context) : Interceptor {
                 put("messageId", UUID.randomUUID().toString())
                 put("messageTimestamp", timestamp)
                 put("callerId", "ANDROID_APP") // كما يطلب نظام جوالي
+                put("messageContext", "AUTH")
             }
 
             // 4. تجميع الـ Header والـ Body في غلاف واحد (Envelope)
