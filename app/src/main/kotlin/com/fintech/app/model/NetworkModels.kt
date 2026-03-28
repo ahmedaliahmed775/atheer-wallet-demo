@@ -3,14 +3,13 @@ package com.fintech.app.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// --- Auth (Login) ---
 @Serializable
 data class LoginRequest(
     val grant_type: String = "password",
     val client_id: String = "restapp",
     val client_secret: String = "restapp",
     val scope: String = "read",
-    val username: String, // Phone number
+    val username: String,
     val password: String
 )
 
@@ -23,7 +22,6 @@ data class LoginResponse(
     val scope: String? = null
 )
 
-// --- Wallet Auth ---
 @Serializable
 data class WalletAuthRequest(
     val identifier: String,
@@ -37,7 +35,6 @@ data class WalletAuthResponse(
     val org_name: String? = null
 )
 
-// --- Voucher ---
 @Serializable
 data class VoucherRequest(
     val amount: Double
@@ -51,16 +48,15 @@ data class VoucherResponse(
     val status: String
 )
 
-// --- Merchant Cashout (E-commerce Cashout) ---
 @Serializable
 data class MerchantChargeRequest(
     val agentWallet: String,
     val voucher: String,
-    val receiverMobile: String,
     val password: String,
     val accessToken: String,
-    val refId: String,
-    val purpose: String
+    val receiverMobile: String? = null,
+    val refId: String? = null,
+    val purpose: String? = null
 )
 
 @Serializable
@@ -74,7 +70,6 @@ data class MerchantChargeResponse(
     val status: String? = null
 )
 
-// --- Inquiry (E-commerce Inquiry) ---
 @Serializable
 data class InquiryRequest(
     val agentWallet: String,
@@ -91,5 +86,6 @@ data class InquiryResponse(
     val senderMobile: String? = null,
     val updateTime: String? = null,
     val state: String? = null,
+    val status: String? = null,
     val trxDate: String? = null
 )
