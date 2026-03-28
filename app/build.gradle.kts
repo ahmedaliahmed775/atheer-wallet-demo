@@ -62,6 +62,14 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.lifecycle.viewmodel.compose)
 
+    // Networking
+    implementation(libs.retrofit)
+    implementation(libs.okhttp.logging)
+    implementation(libs.retrofit.serialization.converter)
+    
+    // Security
+    implementation(libs.androidx.security.crypto)
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     testImplementation(libs.junit)

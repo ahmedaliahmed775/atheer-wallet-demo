@@ -2,232 +2,221 @@ package com.fintech.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fintech.app.App
 import com.fintech.app.model.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
+import java.util.UUID
+
+data class VoucherState(
+    val code: String = "",
+    val timeLeft: Long = 0, // in seconds
+    val isExpired: Boolean = false,
+    val isLoading: Boolean = false
+)
 
 class FinTechViewModel : ViewModel() {
+
+    private val repository = App.instance.walletRepository
+    private val securityManager = App.instance.securityManager
 
     private val _appState = MutableStateFlow(AppState())
     val appState: StateFlow<AppState> = _appState.asStateFlow()
 
-    // Mock database of users
-    private val mockUsers = mutableListOf(
-        User(
-            id = "user-001",
-            name = "أحمد محمد",
-            phone = "0501234567",
-            pinHash = "1234",
-            role = UserRole.CUSTOMER,
-            balance = 5000.0,
-            biometricEnabled = false
-        ),
-        User(
-            id = "merchant-001",
-            name = "متجر النور",
-            phone = "0559876543",
-            pinHash = "1234",
-            role = UserRole.MERCHANT,
-            balance = 15000.0,
-            storeName = "متجر النور للإلكترونيات"
-        )
-    )
+    private val _voucherState = MutableStateFlow(VoucherState())
+    val voucherState: StateFlow<VoucherState> = _voucherState.asStateFlow()
 
-    private val mockTransactions = mutableListOf(
-        Transaction(
-            id = "txn-001",
-            type = TransactionType.TRANSFER,
-            amount = 250.0,
-            recipient = "0509876543",
-            recipientName = "سارة علي",
-            date = LocalDateTime.now().minusHours(2),
-            status = TransactionStatus.SUCCESS,
-            description = "تحويل مالي"
-        ),
-        Transaction(
-            id = "txn-002",
-            type = TransactionType.BILL_PAYMENT,
-            amount = 120.0,
-            recipient = "STC",
-            recipientName = "STC",
-            date = LocalDateTime.now().minusDays(1),
-            status = TransactionStatus.SUCCESS,
-            description = "سداد فاتورة هاتف"
-        ),
-        Transaction(
-            id = "txn-003",
-            type = TransactionType.RECEIVED,
-            amount = 500.0,
-            recipient = "0501112233",
-            recipientName = "محمد خالد",
-            date = LocalDateTime.now().minusDays(2),
-            status = TransactionStatus.SUCCESS,
-            description = "استلام تحويل"
-        )
-    )
+    private var timerJob: Job? = null
 
-    // ─── Auth ─────────────────────────────────────────────────────────────────
+    // ─── Auth Flow ────────────────────────────────────────────────────────────
 
-    fun login(phone: String, pin: String) {
+    fun createAccount(userData: UserData) {
         viewModelScope.launch {
             _appState.update { it.copy(isLoading = true, errorMessage = null) }
-            delay(1200) // Simulate network call
-            val user = mockUsers.find { it.phone == phone && it.pinHash == pin }
-            if (user != null) {
-                val userTransactions = mockTransactions.filter {
-                    it.recipient == phone || it.recipientName.contains(user.name)
-                }
+            val roleString = if (userData.role == UserRole.MERCHANT) "merchant" else "customer"
+            val signupRequest = SignupRequest(
+                phone = userData.phone,
+                password = userData.pin,
+                name = userData.name,
+                role = roleString
+            )
+            repository.signup(signupRequest).onSuccess { response ->
+                // After successful signup, we can treat it as a login
+                securityManager.saveToken(response.data.accessToken)
+                securityManager.savePassword(userData.pin)
+
                 _appState.update {
                     it.copy(
-                        currentUser = user,
-                        transactions = mockTransactions.toList(),
+                        currentUser = User(
+                            name = response.data.user.name,
+                            phone = response.data.user.phone,
+                            role = userData.role,
+                            pinHash = "" // Consider how to handle PIN/password securely
+                        ),
                         isLoading = false,
                         errorMessage = null
                     )
                 }
-            } else {
-                _appState.update {
-                    it.copy(isLoading = false, errorMessage = "رقم الهاتف أو الرمز السري غير صحيح")
-                }
+            }.onFailure { error ->
+                _appState.update { it.copy(isLoading = false, errorMessage = "فشل إنشاء الحساب: ${error.message}") }
             }
         }
     }
 
-    fun createAccount(userData: UserData) {
+    /**
+     * Step 1: Login to the main server to get OAuth2 token
+     */
+    fun login(username: String, pin: String) {
         viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            delay(1500)
-            val newUser = User(
-                name = userData.name,
-                phone = userData.phone,
-                pinHash = userData.pin,
-                role = userData.role,
-                balance = 0.0,
-                storeName = userData.storeName
+            _appState.update { it.copy(isLoading = true, errorMessage = null) }
+            
+            // Note: In a real production app, client_id and client_secret should be managed securely
+            val loginRequest = LoginRequest(
+                client_id = "restapp", 
+                client_secret = "restapp",
+                username = username,
+                password = pin
             )
-            mockUsers.add(newUser)
-            _appState.update {
-                it.copy(
-                    currentUser = newUser,
-                    transactions = emptyList(),
-                    isLoading = false
-                )
+
+            repository.login(loginRequest).onSuccess { response ->
+                securityManager.saveToken(response.access_token)
+                // After successful login, we proceed to Wallet Auth
+                performWalletAuth(username, pin)
+            }.onFailure { error ->
+                _appState.update { it.copy(isLoading = false, errorMessage = "فشل تسجيل الدخول: ${error.message}") }
+            }
+        }
+    }
+
+    /**
+     * Step 2: Authenticate specifically with the wallet system
+     */
+    private fun performWalletAuth(identifier: String, pin: String) {
+        viewModelScope.launch {
+            val walletRequest = WalletAuthRequest(identifier = identifier, password = pin)
+            
+            repository.walletAuth(walletRequest).onSuccess { response ->
+                // This is the accessToken required for financial operations
+                securityManager.saveToken(response.access_token)
+                securityManager.savePassword(pin) // Save for subsequent body-auth requests
+                
+                _appState.update {
+                    it.copy(
+                        currentUser = User(name = response.org_name ?: identifier, phone = identifier, role = UserRole.MERCHANT, pinHash = ""),
+                        isLoading = false,
+                        errorMessage = null
+                    )
+                }
+            }.onFailure { error ->
+                _appState.update { it.copy(isLoading = false, errorMessage = "فشل مصادقة المحفظة: ${error.message}") }
             }
         }
     }
 
     fun logout() {
+        securityManager.clear()
         _appState.update { AppState() }
     }
 
-    // ─── Transactions ─────────────────────────────────────────────────────────
+    // ─── Voucher System ───────────────────────────────────────────────────────
 
-    fun transferMoney(recipientPhone: String, amount: Double) {
+    fun generateVoucher(amount: Double) {
         viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            delay(1500)
-            val currentUser = _appState.value.currentUser ?: return@launch
-            if (currentUser.balance < amount) {
-                _appState.update {
-                    it.copy(isLoading = false, errorMessage = "الرصيد غير كافٍ")
+            _voucherState.update { it.copy(isLoading = true) }
+            repository.generateVoucher(amount).onSuccess { response ->
+                _voucherState.update { 
+                    it.copy(
+                        code = response.voucherCode,
+                        timeLeft = 300, // 5 minutes
+                        isExpired = false,
+                        isLoading = false
+                    )
                 }
-                return@launch
-            }
-            val recipientUser = mockUsers.find { it.phone == recipientPhone }
-            val newTxn = Transaction(
-                type = TransactionType.TRANSFER,
-                amount = amount,
-                recipient = recipientPhone,
-                recipientName = recipientUser?.name ?: recipientPhone,
-                description = "تحويل مالي"
-            )
-            val updatedUser = currentUser.copy(balance = currentUser.balance - amount)
-            mockTransactions.add(0, newTxn)
-            _appState.update {
-                it.copy(
-                    currentUser = updatedUser,
-                    transactions = mockTransactions.toList(),
-                    isLoading = false
-                )
+                startVoucherTimer()
+            }.onFailure { error ->
+                _voucherState.update { it.copy(isLoading = false) }
+                _appState.update { it.copy(errorMessage = "فشل توليد القسيمة: ${error.message}") }
             }
         }
     }
 
-    fun payBill(service: BillService, amount: Double) {
+    private fun startVoucherTimer() {
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            while (_voucherState.value.timeLeft > 0) {
+                delay(1000)
+                _voucherState.update { it.copy(timeLeft = it.timeLeft - 1) }
+            }
+            _voucherState.update { it.copy(isExpired = true) }
+        }
+    }
+
+    // ─── Merchant Operations ──────────────────────────────────────────────────
+
+    fun processMerchantCashout(voucherCode: String, receiverMobile: String) {
         viewModelScope.launch {
             _appState.update { it.copy(isLoading = true) }
-            delay(1500)
             val currentUser = _appState.value.currentUser ?: return@launch
-            if (currentUser.balance < amount) {
-                _appState.update {
-                    it.copy(isLoading = false, errorMessage = "الرصيد غير كافٍ")
+            val password = securityManager.getPassword() ?: ""
+            val token = securityManager.getToken() ?: ""
+
+            val request = MerchantChargeRequest(
+                agentWallet = currentUser.phone,
+                voucher = voucherCode,
+                receiverMobile = receiverMobile,
+                password = password,
+                accessToken = token,
+                refId = UUID.randomUUID().toString(),
+                purpose = "Cashout via Android App"
+            )
+
+            repository.merchantCashout(request).onSuccess { response ->
+                _appState.update { 
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "تمت العملية بنجاح. المرجع: ${response.refId ?: "N/A"}"
+                    ) 
                 }
-                return@launch
-            }
-            val newTxn = Transaction(
-                type = TransactionType.BILL_PAYMENT,
-                amount = amount,
-                recipient = service.name,
-                recipientName = service.labelAr,
-                description = "سداد ${service.labelAr}"
-            )
-            val updatedUser = currentUser.copy(balance = currentUser.balance - amount)
-            mockTransactions.add(0, newTxn)
-            _appState.update {
-                it.copy(
-                    currentUser = updatedUser,
-                    transactions = mockTransactions.toList(),
-                    isLoading = false
-                )
+            }.onFailure { error ->
+                _appState.update { 
+                    it.copy(isLoading = false, errorMessage = "فشلت العملية: ${error.message}")
+                }
             }
         }
     }
 
-    fun collectPayment(amount: Double) {
+    fun inquiryTransaction(refId: String) {
         viewModelScope.launch {
             _appState.update { it.copy(isLoading = true) }
-            delay(1000)
             val currentUser = _appState.value.currentUser ?: return@launch
-            val newTxn = Transaction(
-                type = TransactionType.QR_PAYMENT,
-                amount = amount,
-                recipient = "QR",
-                recipientName = "تحصيل QR",
-                description = "تحصيل عبر QR"
+            val password = securityManager.getPassword() ?: ""
+            val token = securityManager.getToken() ?: ""
+
+            val request = InquiryRequest(
+                agentWallet = currentUser.phone,
+                password = password,
+                accessToken = token,
+                refId = refId
             )
-            val updatedUser = currentUser.copy(balance = currentUser.balance + amount)
-            mockTransactions.add(0, newTxn)
-            _appState.update {
-                it.copy(
-                    currentUser = updatedUser,
-                    transactions = mockTransactions.toList(),
-                    isLoading = false
-                )
+
+            repository.inquiry(request).onSuccess { response ->
+                _appState.update { 
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "حالة المعاملة: ${response.state ?: "غير معروفة"}"
+                    ) 
+                }
+            }.onFailure { error ->
+                _appState.update { 
+                    it.copy(isLoading = false, errorMessage = "فشل الاستعلام: ${error.message}")
+                }
             }
         }
-    }
-
-    // ─── Settings ─────────────────────────────────────────────────────────────
-
-    fun toggleBiometric(enabled: Boolean) {
-        _appState.update {
-            it.copy(currentUser = it.currentUser?.copy(biometricEnabled = enabled))
-        }
-    }
-
-    fun changePIN(newPin: String) {
-        _appState.update {
-            it.copy(currentUser = it.currentUser?.copy(pinHash = newPin))
-        }
-    }
-
-    fun setLanguage(language: Language) {
-        _appState.update { it.copy(language = language) }
     }
 
     fun clearError() {
