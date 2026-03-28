@@ -9,23 +9,19 @@ class WalletRepository(private val service: WalletService) {
         return handleApi { service.login(request) }
     }
 
-    suspend fun walletAuth(request: WalletAuthRequest): Result<BaseResponse<WalletAuthResponse>> {
+    suspend fun walletAuth(request: WalletAuthRequest): Result<WalletAuthResponse> {
         return handleApi { service.walletAuth(request) }
     }
 
-    suspend fun signup(request: SignupRequest): Result<BaseResponse<SignupResponseData>> {
-        return handleApi { service.signup(request) }
-    }
-
-    suspend fun generateVoucher(amount: Double): Result<BaseResponse<VoucherResponse>> {
+    suspend fun generateVoucher(amount: Double): Result<VoucherResponse> {
         return handleApi { service.generateVoucher(VoucherRequest(amount)) }
     }
 
-    suspend fun merchantCashout(request: MerchantChargeRequest): Result<BaseResponse<MerchantChargeResponse>> {
+    suspend fun merchantCashout(request: MerchantChargeRequest): Result<MerchantChargeResponse> {
         return handleApi { service.merchantCashout(request) }
     }
 
-    suspend fun inquiry(request: InquiryRequest): Result<BaseResponse<InquiryResponse>> {
+    suspend fun inquiry(request: InquiryRequest): Result<InquiryResponse> {
         return handleApi { service.inquiry(request) }
     }
 
