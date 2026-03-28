@@ -46,21 +46,25 @@ class FinTechViewModel : ViewModel() {
                 role = roleString
             )
             repository.signup(signupRequest).onSuccess { response ->
-                // After successful signup, we can treat it as a login
-                securityManager.saveToken(response.data.accessToken)
-                securityManager.savePassword(userData.pin)
+                val data = response.body
+                if (response.responseCode == 0 && data != null) {
+                    securityManager.saveToken(data.accessToken)
+                    securityManager.savePassword(userData.pin)
 
-                _appState.update {
-                    it.copy(
-                        currentUser = User(
-                            name = response.data.user.name,
-                            phone = response.data.user.phone,
-                            role = userData.role,
-                            pinHash = "" // Consider how to handle PIN/password securely
-                        ),
-                        isLoading = false,
-                        errorMessage = null
-                    )
+                    _appState.update {
+                        it.copy(
+                            currentUser = User(
+                                name = data.user.name,
+                                phone = data.user.phone,
+                                role = userData.role,
+                                pinHash = ""
+                            ),
+                            isLoading = false,
+                            errorMessage = null
+                        )
+                    }
+                } else {
+                    _appState.update { it.copy(isLoading = false, errorMessage = response.responseMessage) }
                 }
             }.onFailure { error ->
                 _appState.update { it.copy(isLoading = false, errorMessage = "فشل إنشاء الحساب: ${error.message}") }
@@ -68,24 +72,17 @@ class FinTechViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Step 1: Login to the main server to get OAuth2 token
-     */
     fun login(username: String, pin: String) {
         viewModelScope.launch {
             _appState.update { it.copy(isLoading = true, errorMessage = null) }
             
-            // Note: In a real production app, client_id and client_secret should be managed securely
             val loginRequest = LoginRequest(
-                client_id = "restapp", 
-                client_secret = "restapp",
                 username = username,
                 password = pin
             )
 
             repository.login(loginRequest).onSuccess { response ->
                 securityManager.saveToken(response.access_token)
-                // After successful login, we proceed to Wallet Auth
                 performWalletAuth(username, pin)
             }.onFailure { error ->
                 _appState.update { it.copy(isLoading = false, errorMessage = "فشل تسجيل الدخول: ${error.message}") }
@@ -93,24 +90,25 @@ class FinTechViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Step 2: Authenticate specifically with the wallet system
-     */
     private fun performWalletAuth(identifier: String, pin: String) {
         viewModelScope.launch {
             val walletRequest = WalletAuthRequest(identifier = identifier, password = pin)
             
             repository.walletAuth(walletRequest).onSuccess { response ->
-                // This is the accessToken required for financial operations
-                securityManager.saveToken(response.access_token)
-                securityManager.savePassword(pin) // Save for subsequent body-auth requests
-                
-                _appState.update {
-                    it.copy(
-                        currentUser = User(name = response.org_name ?: identifier, phone = identifier, role = UserRole.MERCHANT, pinHash = ""),
-                        isLoading = false,
-                        errorMessage = null
-                    )
+                val data = response.body
+                if (response.responseCode == 0 && data != null) {
+                    securityManager.saveToken(data.access_token)
+                    securityManager.savePassword(pin)
+                    
+                    _appState.update {
+                        it.copy(
+                            currentUser = User(name = data.org_name ?: identifier, phone = identifier, role = UserRole.MERCHANT, pinHash = ""),
+                            isLoading = false,
+                            errorMessage = null
+                        )
+                    }
+                } else {
+                    _appState.update { it.copy(isLoading = false, errorMessage = response.responseMessage) }
                 }
             }.onFailure { error ->
                 _appState.update { it.copy(isLoading = false, errorMessage = "فشل مصادقة المحفظة: ${error.message}") }
@@ -129,15 +127,21 @@ class FinTechViewModel : ViewModel() {
         viewModelScope.launch {
             _voucherState.update { it.copy(isLoading = true) }
             repository.generateVoucher(amount).onSuccess { response ->
-                _voucherState.update { 
-                    it.copy(
-                        code = response.voucherCode,
-                        timeLeft = 300, // 5 minutes
-                        isExpired = false,
-                        isLoading = false
-                    )
+                val data = response.body
+                if (response.responseCode == 0 && data != null) {
+                    _voucherState.update { 
+                        it.copy(
+                            code = data.voucherCode,
+                            timeLeft = 300,
+                            isExpired = false,
+                            isLoading = false
+                        )
+                    }
+                    startVoucherTimer()
+                } else {
+                    _voucherState.update { it.copy(isLoading = false) }
+                    _appState.update { it.copy(errorMessage = response.responseMessage) }
                 }
-                startVoucherTimer()
             }.onFailure { error ->
                 _voucherState.update { it.copy(isLoading = false) }
                 _appState.update { it.copy(errorMessage = "فشل توليد القسيمة: ${error.message}") }
@@ -176,11 +180,15 @@ class FinTechViewModel : ViewModel() {
             )
 
             repository.merchantCashout(request).onSuccess { response ->
-                _appState.update { 
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "تمت العملية بنجاح. المرجع: ${response.refId ?: "N/A"}"
-                    ) 
+                if (response.responseCode == 0) {
+                    _appState.update { 
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "تمت العملية بنجاح. المرجع: ${response.body?.refId ?: "N/A"}"
+                        ) 
+                    }
+                } else {
+                    _appState.update { it.copy(isLoading = false, errorMessage = response.responseMessage) }
                 }
             }.onFailure { error ->
                 _appState.update { 
@@ -205,11 +213,15 @@ class FinTechViewModel : ViewModel() {
             )
 
             repository.inquiry(request).onSuccess { response ->
-                _appState.update { 
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "حالة المعاملة: ${response.state ?: "غير معروفة"}"
-                    ) 
+                if (response.responseCode == 0) {
+                    _appState.update { 
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "حالة المعاملة: ${response.body?.state ?: "غير معروفة"}"
+                        ) 
+                    }
+                } else {
+                    _appState.update { it.copy(isLoading = false, errorMessage = response.responseMessage) }
                 }
             }.onFailure { error ->
                 _appState.update { 

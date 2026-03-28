@@ -7,10 +7,10 @@ import retrofit2.http.POST
 
 interface WalletService {
 
-    @POST("auth/signup")
+    @POST("auth/register")
     suspend fun signup(
         @Body request: SignupRequest
-    ): Response<SignupResponse>
+    ): Response<BaseResponse<SignupResponseData>>
 
     @POST("auth/login")
     suspend fun login(
@@ -20,20 +20,20 @@ interface WalletService {
     @POST("auth/wallet-auth")
     suspend fun walletAuth(
         @Body request: WalletAuthRequest
-    ): Response<WalletAuthResponse>
+    ): Response<BaseResponse<WalletAuthResponse>>
 
     @POST("wallet/generate-voucher")
     suspend fun generateVoucher(
         @Body request: VoucherRequest
-    ): Response<VoucherResponse>
+    ): Response<BaseResponse<VoucherResponse>>
 
     @POST("merchant/switch-charge")
     suspend fun merchantCashout(
         @Body request: MerchantChargeRequest
-    ): Response<MerchantChargeResponse>
+    ): Response<BaseResponse<MerchantChargeResponse>>
 
     @POST("merchant/inquiry")
     suspend fun inquiry(
         @Body request: InquiryRequest
-    ): Response<InquiryResponse>
+    ): Response<BaseResponse<InquiryResponse>>
 }

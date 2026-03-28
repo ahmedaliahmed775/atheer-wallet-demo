@@ -2,6 +2,30 @@ package com.fintech.app.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.util.UUID
+
+// --- Generic Request Envelope ---
+@Serializable
+data class RequestEnvelope<T>(
+    val header: RequestHeader = RequestHeader(),
+    val body: T
+)
+
+@Serializable
+data class RequestHeader(
+    val messageContext: String = "APP",
+    val messageId: String = UUID.randomUUID().toString(),
+    val messageTimestamp: String = System.currentTimeMillis().toString(),
+    val callerId: String = "MOBILE_APP"
+)
+
+// --- Generic Response Envelope ---
+@Serializable
+data class BaseResponse<T>(
+    @SerialName("ResponseCode") val responseCode: Int,
+    @SerialName("ResponseMessage") val responseMessage: String,
+    val body: T? = null
+)
 
 // --- Auth (Signup) ---
 @Serializable
@@ -10,13 +34,6 @@ data class SignupRequest(
     val password: String,
     val name: String,
     val role: String // "customer" or "merchant"
-)
-
-@Serializable
-data class SignupResponse(
-    val success: Boolean,
-    val message: String,
-    val data: SignupResponseData
 )
 
 @Serializable
@@ -37,11 +54,10 @@ data class SignupUser(
 @Serializable
 data class LoginRequest(
     val grant_type: String = "password",
-    val client_id: String,
-    val client_secret: String,
-    val scope: String = "read",
-    val username: String,
-    val password: String
+    val username: String, // Phone number
+    val password: String,
+    // Note: client_id and client_secret might be needed if using standard OAuth2, 
+    // but typically omitted if handled by interceptor or if server is simple.
 )
 
 @Serializable
@@ -102,7 +118,7 @@ data class MerchantChargeResponse(
     val userId: String? = null,
     val trxDate: String? = null,
     val status: String? = null,
-    val message: String? = null // For error cases
+    val message: String? = null
 )
 
 // --- Inquiry ---

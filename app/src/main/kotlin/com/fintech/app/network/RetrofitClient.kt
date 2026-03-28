@@ -1,5 +1,6 @@
 package com.fintech.app.network
 
+import com.fintech.app.App
 import com.fintech.app.utils.Constants
 import com.fintech.app.utils.NetworkInterceptor
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -20,7 +21,7 @@ object RetrofitClient {
     }
 
     private val okHttpClient = OkHttpClient.Builder()
-        .addInterceptor(NetworkInterceptor())
+        .addInterceptor(NetworkInterceptor(App.instance))
         .addInterceptor(loggingInterceptor)
         .build()
 
