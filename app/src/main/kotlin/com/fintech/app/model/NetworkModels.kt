@@ -1,91 +1,75 @@
-package com.fintech.app.model
+package com.fintech.app.network
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import android.content.Context
+import com.fintech.app.BuildConfig
+import com.fintech.app.data.SessionManager
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
 
-@Serializable
-data class LoginRequest(
-    val grant_type: String = "password",
-    val client_id: String = "restapp",
-    val client_secret: String = "restapp",
-    val scope: String = "read",
-    val username: String,
-    val password: String
-)
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
 
-@Serializable
-data class LoginResponse(
-    val access_token: String,
-    val token_type: String,
-    val refresh_token: String? = null,
-    val expires_in: Int,
-    val scope: String? = null
-)
+    @Provides
+    @Singleton
+    fun provideSessionManager(@ApplicationContext ctx: Context): SessionManager =
+        SessionManager(ctx)
 
-@Serializable
-data class WalletAuthRequest(
-    val identifier: String,
-    val password: String
-)
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(sessionManager: SessionManager): OkHttpClient {
 
-@Serializable
-data class WalletAuthResponse(
-    val access_token: String,
-    val org_value: String? = null,
-    val org_name: String? = null
-)
+        val authInterceptor = Interceptor { chain ->
+            val token = runBlocking { sessionManager.token.first() }
+            val request = if (!token.isNullOrBlank()) {
+                chain.request().newBuilder()
+                    .addHeader("Authorization", "Bearer $token")
+                    .build()
+            } else {
+                chain.request()
+            }
+            chain.proceed(request)
+        }
 
-@Serializable
-data class VoucherRequest(
-    val amount: Double
-)
+        val logging = HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG)
+                HttpLoggingInterceptor.Level.BODY
+            else
+                HttpLoggingInterceptor.Level.NONE
+        }
 
-@Serializable
-data class VoucherResponse(
-    val voucherCode: String,
-    val amount: Double,
-    val expiresAt: String,
-    val status: String
-)
+        return OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .addInterceptor(logging)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
 
-@Serializable
-data class MerchantChargeRequest(
-    val agentWallet: String,
-    val voucher: String,
-    val password: String,
-    val accessToken: String,
-    val receiverMobile: String? = null,
-    val refId: String? = null,
-    val purpose: String? = null
-)
+    @Provides
+    @Singleton
+    fun provideRetrofit(client: OkHttpClient): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BuildConfig.BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
 
-@Serializable
-data class MerchantChargeResponse(
-    val amount: Double? = null,
-    val balance: Double? = null,
-    @SerialName("IssuerRef") val IssuerRef: String? = null,
-    val refId: String? = null,
-    val userId: String? = null,
-    val trxDate: String? = null,
-    val status: String? = null
-)
-
-@Serializable
-data class InquiryRequest(
-    val agentWallet: String,
-    val password: String,
-    val accessToken: String,
-    val refId: String
-)
-
-@Serializable
-data class InquiryResponse(
-    val issuerTrxRef: String? = null,
-    val txnamount: Double? = null,
-    val receiverMobile: String? = null,
-    val senderMobile: String? = null,
-    val updateTime: String? = null,
-    val state: String? = null,
-    val status: String? = null,
-    val trxDate: String? = null
-)
+    @Provides
+    @Singleton
+    fun provideApiService(retrofit: Retrofit): WalletApiService =
+        retrofit.create(WalletApiService::class.java)
+}
