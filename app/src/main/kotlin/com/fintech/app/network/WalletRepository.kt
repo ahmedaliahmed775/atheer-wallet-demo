@@ -1,97 +1,230 @@
-package com.fintech.app.data
+package com.fintech.app.viewmodel
 
-import com.fintech.app.model.*
-import com.fintech.app.network.WalletApiService
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.fintech.app.data.SessionManager
+import com.fintech.app.data.WalletRepository
+import com.fintech.app.model.AppUiState
+import com.fintech.app.model.TransactionDto
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
-class WalletRepository @Inject constructor(
-    private val api: WalletApiService,
+@HiltViewModel
+class FinTechViewModel @Inject constructor(
+    private val repo: WalletRepository,
     private val session: SessionManager
-) {
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(AppUiState())
+    val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
+
+    init {
+        // Restore session from DataStore on launch
+        viewModelScope.launch {
+            combine(
+                session.isLoggedIn,
+                session.token,
+                session.name,
+                session.phone,
+                session.role,
+                session.balance,
+                session.userId
+            ) { arr ->
+                val loggedIn = arr[0] as Boolean
+                val token    = arr[1] as? String ?: ""
+                val name     = arr[2] as? String ?: ""
+                val phone    = arr[3] as? String ?: ""
+                val role     = arr[4] as? String ?: "customer"
+                val balance  = arr[5] as? Double ?: 0.0
+                val userId   = arr[6] as? Int ?: 0
+                AppUiState(
+                    isLoggedIn = loggedIn,
+                    token = token,
+                    userName = name,
+                    userPhone = phone,
+                    userRole = role,
+                    balance = balance,
+                    userId = userId
+                )
+            }.collect { restored ->
+                _uiState.update { restored }
+                if (restored.isLoggedIn) refreshBalance()
+            }
+        }
+    }
+
     // ─── Auth ─────────────────────────────────────────────
 
-    suspend fun login(phone: String, password: String): Result<AuthBody> = runCatching {
-        val res = api.login(LoginRequest(phone, password))
-        if (res.responseCode != 0) error(res.responseMessage)
-        val body = res.body ?: error("لا يوجد بيانات في الاستجابة")
-        session.save(
-            token   = body.accessToken,
-            userId  = body.user.id,
-            name    = body.user.name,
-            phone   = body.user.phone,
-            role    = body.user.role,
-            balance = body.user.balance
-        )
-        body
+    fun login(phone: String, password: String) {
+        if (phone.isBlank() || password.isBlank()) {
+            setError("يرجى إدخال رقم الهاتف وكلمة المرور")
+            return
+        }
+        viewModelScope.launch {
+            setLoading(true)
+            repo.login(phone.trim(), password.trim())
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isLoggedIn = true,
+                            token = body.accessToken,
+                            userId = body.user.id,
+                            userName = body.user.name,
+                            userPhone = body.user.phone,
+                            userRole = body.user.role,
+                            balance = body.user.balance,
+                            error = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل تسجيل الدخول") }
+        }
     }
 
-    suspend fun signup(name: String, phone: String, password: String, role: String): Result<AuthBody> = runCatching {
-        val res = api.signup(SignupRequest(name, phone, password, role))
-        if (res.responseCode != 0) error(res.responseMessage)
-        val body = res.body ?: error("لا يوجد بيانات في الاستجابة")
-        session.save(
-            token   = body.accessToken,
-            userId  = body.user.id,
-            name    = body.user.name,
-            phone   = body.user.phone,
-            role    = body.user.role,
-            balance = body.user.balance
-        )
-        body
+    fun signup(name: String, phone: String, password: String, confirmPassword: String, role: String) {
+        if (name.isBlank() || phone.isBlank() || password.isBlank()) {
+            setError("يرجى تعبئة جميع الحقول"); return
+        }
+        if (password != confirmPassword) {
+            setError("كلمتا المرور غير متطابقتين"); return
+        }
+        if (password.length < 6) {
+            setError("كلمة المرور 6 أحرف على الأقل"); return
+        }
+        viewModelScope.launch {
+            setLoading(true)
+            repo.signup(name.trim(), phone.trim(), password, role)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isLoggedIn = true,
+                            token = body.accessToken,
+                            userId = body.user.id,
+                            userName = body.user.name,
+                            userPhone = body.user.phone,
+                            userRole = body.user.role,
+                            balance = body.user.balance,
+                            error = null
+                        )
+                    }
+                }
+                .onFailure { setError(it.message ?: "فشل إنشاء الحساب") }
+        }
     }
 
-    suspend fun logout() = session.clear()
+    fun logout() {
+        viewModelScope.launch {
+            repo.logout()
+            _uiState.value = AppUiState()
+        }
+    }
 
     // ─── Wallet ───────────────────────────────────────────
 
-    suspend fun getBalance(): Result<BalanceBody> = runCatching {
-        val res = api.getBalance()
-        if (res.responseCode != 0) error(res.responseMessage)
-        val body = res.body ?: error("فشل جلب الرصيد")
-        session.updateBalance(body.balance)
-        body
+    fun refreshBalance() {
+        viewModelScope.launch {
+            repo.getBalance()
+                .onSuccess { body ->
+                    _uiState.update { it.copy(balance = body.balance, userName = body.name) }
+                }
+                .onFailure { /* silent refresh failure */ }
+        }
     }
 
-    suspend fun transfer(receiverPhone: String, amount: Double, note: String): Result<TransferBody> = runCatching {
-        val res = api.transfer(TransferRequest(receiverPhone, amount, note))
-        if (res.responseCode != 0) error(res.responseMessage)
-        val body = res.body ?: error("فشل التحويل")
-        session.updateBalance(body.newBalance)
-        body
+    fun transfer(receiverPhone: String, amount: Double, note: String) {
+        if (receiverPhone.isBlank()) { setError("يرجى إدخال رقم المستلم"); return }
+        if (amount <= 0)             { setError("يرجى إدخال مبلغ صحيح");    return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ");  return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.transfer(receiverPhone.trim(), amount, note)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            balance = body.newBalance,
+                            lastTransfer = body,
+                            successMessage = "تم تحويل ${body.amount} ﷼ بنجاح",
+                            error = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل التحويل") }
+        }
     }
 
-    suspend fun generateVoucher(amount: Double): Result<VoucherBody> = runCatching {
-        val res = api.generateVoucher(GenerateVoucherRequest(amount))
-        if (res.responseCode != 0) error(res.responseMessage)
-        val body = res.body ?: error("فشل إنشاء القسيمة")
-        session.updateBalance(body.newBalance)
-        body
+    fun generateVoucher(amount: Double) {
+        if (amount <= 0)                   { setError("يرجى إدخال مبلغ صحيح");  return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ");      return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.generateVoucher(amount)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            balance = body.newBalance,
+                            lastVoucher = body,
+                            successMessage = "تم إنشاء القسيمة: ${body.voucherCode}",
+                            error = null
+                        )
+                    }
+                }
+                .onFailure { setError(it.message ?: "فشل إنشاء القسيمة") }
+        }
     }
 
-    suspend fun getTransactions(page: Int = 1): Result<TransactionsBody> = runCatching {
-        val res = api.getTransactions(page)
-        if (res.responseCode != 0) error(res.responseMessage)
-        res.body ?: error("فشل جلب المعاملات")
+    fun loadTransactions(page: Int = 1) {
+        viewModelScope.launch {
+            val result = if (_uiState.value.userRole == "merchant")
+                repo.getMerchantTransactions(page)
+            else
+                repo.getTransactions(page)
+
+            result.onSuccess { body ->
+                val txns = if (page == 1) body.transactions
+                           else _uiState.value.transactions + body.transactions
+                _uiState.update { it.copy(transactions = txns) }
+            }
+        }
     }
 
-    // ─── Merchant ─────────────────────────────────────────
-
-    suspend fun cashout(
-        agentWallet: String,
-        password: String,
-        token: String,
-        voucher: String
-    ): Result<CashoutBody> = runCatching {
-        val res = api.cashout(CashoutRequest(agentWallet, password, token, voucher))
-        if (res.responseCode != 0) error(res.responseMessage)
-        res.body ?: error("فشلت عملية الدفع")
+    fun cashout(agentWallet: String, password: String, voucherCode: String) {
+        if (agentWallet.isBlank() || password.isBlank() || voucherCode.isBlank()) {
+            setError("يرجى إدخال جميع البيانات"); return
+        }
+        viewModelScope.launch {
+            setLoading(true)
+            val token = _uiState.value.token
+            repo.cashout(agentWallet, password, token, voucherCode)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            lastCashout = body,
+                            successMessage = "تم استلام ${body.amount} ﷼ بنجاح",
+                            error = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل عملية الدفع") }
+        }
     }
 
-    suspend fun getMerchantTransactions(page: Int = 1): Result<TransactionsBody> = runCatching {
-        val res = api.getMerchantTransactions(page)
-        if (res.responseCode != 0) error(res.responseMessage)
-        res.body ?: error("فشل جلب معاملات التاجر")
-    }
+    // ─── UI Helpers ───────────────────────────────────────
+
+    fun clearError()   = _uiState.update { it.copy(error = null) }
+    fun clearSuccess() = _uiState.update { it.copy(successMessage = null, lastVoucher = null, lastTransfer = null, lastCashout = null) }
+
+    private fun setLoading(v: Boolean) = _uiState.update { it.copy(isLoading = v, error = null) }
+    private fun setError(msg: String)  = _uiState.update { it.copy(isLoading = false, error = msg) }
 }
