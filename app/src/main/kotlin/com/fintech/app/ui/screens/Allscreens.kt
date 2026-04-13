@@ -269,7 +269,7 @@ fun CustomerHomeScreen(
             Column(Modifier.padding(20.dp)) {
                 Text("خدماتك السريعة", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    QuickAction(icon = Icons.Default.SendMoney, label = "تحويل", color = Primary, modifier = Modifier.weight(1f), onClick = onTransfer)
+                    QuickAction(icon = Icons.Default.Send, label = "تحويل", color = Primary, modifier = Modifier.weight(1f), onClick = onTransfer)
                     QuickAction(icon = Icons.Default.QrCode2, label = "قسيمة دفع", color = Color(0xFF534AB7), modifier = Modifier.weight(1f), onClick = onVoucher)
                 }
 
