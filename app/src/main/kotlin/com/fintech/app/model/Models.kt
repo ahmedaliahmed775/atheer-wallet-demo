@@ -1,68 +1,168 @@
 package com.fintech.app.model
 
-import java.time.LocalDateTime
-import java.util.UUID
+import com.google.gson.annotations.SerializedName
 
-// ─── User Models ─────────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────
 
-enum class UserRole { CUSTOMER, MERCHANT }
-
-data class User(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
+data class LoginRequest(
     val phone: String,
-    val pinHash: String,
-    val role: UserRole,
-    val balance: Double = 0.0,
-    val biometricEnabled: Boolean = false,
-    val qrCode: String = id,
-    val storeName: String? = null
+    val password: String
 )
 
-data class UserData(
+data class SignupRequest(
     val name: String,
     val phone: String,
-    val pin: String,
-    val role: UserRole,
-    val storeName: String? = null
+    val password: String,
+    val role: String = "customer"
 )
 
-// ─── Transaction Models ───────────────────────────────────────────────────────
+data class AuthResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String,
+    val body: AuthBody?
+)
 
-enum class TransactionType {
-    TRANSFER, BILL_PAYMENT, QR_PAYMENT, RECEIVED
-}
+data class AuthBody(
+    @SerializedName("access_token") val accessToken: String,
+    @SerializedName("token_type") val tokenType: String,
+    @SerializedName("expires_in") val expiresIn: Long,
+    val user: UserDto
+)
 
-enum class TransactionStatus {
-    PENDING, SUCCESS, FAILED
-}
+data class UserDto(
+    val id: Int,
+    val name: String,
+    val phone: String,
+    val role: String,
+    val balance: Double
+)
 
-enum class BillService(val labelAr: String, val labelEn: String) {
-    PHONE("سداد الهاتف", "Phone Bill"),
-    ELECTRICITY("سداد الكهرباء", "Electricity"),
-    INTERNET("سداد الإنترنت", "Internet")
-}
+// ─── Wallet ───────────────────────────────────────────────
 
-data class Transaction(
-    val id: String = UUID.randomUUID().toString(),
-    val type: TransactionType,
+data class BalanceResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String,
+    val body: BalanceBody?
+)
+
+data class BalanceBody(
+    val balance: Double,
+    val currency: String,
+    val phone: String,
+    val name: String,
+    val role: String
+)
+
+data class TransferRequest(
+    val receiverPhone: String,
     val amount: Double,
-    val recipient: String,
-    val recipientName: String = "",
-    val date: LocalDateTime = LocalDateTime.now(),
-    val status: TransactionStatus = TransactionStatus.SUCCESS,
-    val description: String = "",
-    val referenceNumber: String = "TXN-${System.currentTimeMillis()}"
+    val note: String = "تحويل"
 )
 
-// ─── App State ────────────────────────────────────────────────────────────────
+data class TransferResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String,
+    val body: TransferBody?
+)
 
-enum class Language { ARABIC, ENGLISH }
+data class TransferBody(
+    val transactionId: String,
+    val refId: String,
+    val amount: Double,
+    val receiverName: String,
+    val receiverPhone: String,
+    val newBalance: Double,
+    val timestamp: String
+)
 
-data class AppState(
-    val currentUser: User? = null,
-    val transactions: List<Transaction> = emptyList(),
-    val language: Language = Language.ARABIC,
+// ─── Voucher ──────────────────────────────────────────────
+
+data class GenerateVoucherRequest(
+    val amount: Double
+)
+
+data class VoucherResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String,
+    val body: VoucherBody?
+)
+
+data class VoucherBody(
+    val voucherCode: String,
+    val amount: Double,
+    val expiresAt: String,
+    val newBalance: Double,
+    val status: String
+)
+
+// ─── Merchant ─────────────────────────────────────────────
+
+data class CashoutRequest(
+    val agentWallet: String,
+    val password: String,
+    val accessToken: String,
+    val voucher: String
+)
+
+data class CashoutResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String,
+    val body: CashoutBody?
+)
+
+data class CashoutBody(
+    val transactionId: String,
+    val refId: String,
+    val voucherCode: String,
+    val amount: Double,
+    val merchantWallet: String,
+    val merchantName: String,
+    val timestamp: String
+)
+
+// ─── Transactions ─────────────────────────────────────────
+
+data class TransactionsResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String,
+    val body: TransactionsBody?
+)
+
+data class TransactionsBody(
+    val transactions: List<TransactionDto>,
+    val total: Int,
+    val page: Int,
+    val pages: Int
+)
+
+data class TransactionDto(
+    val id: String,
+    val refId: String?,
+    val type: String,       // DEBIT or CREDIT
+    val txnType: String?,   // TRANSFER, CASHOUT, TOPUP
+    val amount: Double,
+    val counterparty: String?,
+    val counterPhone: String?,
+    val note: String?,
+    val status: String,
+    val timestamp: String
+)
+
+// ─── App UI State ─────────────────────────────────────────
+
+data class AppUiState(
     val isLoading: Boolean = false,
-    val errorMessage: String? = null
+    val isLoggedIn: Boolean = false,
+    val token: String = "",
+    val userId: Int = 0,
+    val userName: String = "",
+    val userPhone: String = "",
+    val userRole: String = "customer",
+    val balance: Double = 0.0,
+    val transactions: List<TransactionDto> = emptyList(),
+    val error: String? = null,
+    val successMessage: String? = null,
+    val lastVoucher: VoucherBody? = null,
+    val lastTransfer: TransferBody? = null,
+    val lastCashout: CashoutBody? = null
 )
