@@ -2,229 +2,227 @@ package com.fintech.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fintech.app.App
-import com.fintech.app.model.*
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import com.fintech.app.data.SessionManager
+import com.fintech.app.data.WalletRepository
+import com.fintech.app.model.AppUiState
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-data class VoucherState(
-    val code: String = "",
-    val timeLeft: Long = 0, // in seconds
-    val isExpired: Boolean = false,
-    val isLoading: Boolean = false
-)
+@HiltViewModel
+class FinTechViewModel @Inject constructor(
+    private val repo: WalletRepository,
+    private val session: SessionManager
+) : ViewModel() {
 
-class FinTechViewModel : ViewModel() {
+    private val _uiState = MutableStateFlow(AppUiState())
+    val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
-    private val repository = App.instance.walletRepository
-    private val securityManager = App.instance.securityManager
-
-    private val _appState = MutableStateFlow(AppState())
-    val appState: StateFlow<AppState> = _appState.asStateFlow()
-
-    private val _voucherState = MutableStateFlow(VoucherState())
-    val voucherState: StateFlow<VoucherState> = _voucherState.asStateFlow()
-
-    private var timerJob: Job? = null
-
-    // ─── Auth Flow ────────────────────────────────────────────────────────────
-
-    fun setLanguage(language: Language) {
-        _appState.update { it.copy(language = language) }
-    }
-
-    fun login(username: String, pin: String) {
+    init {
         viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true, errorMessage = null) }
-
-            val loginRequest = LoginRequest(
-                username = username,
-                password = pin
-            )
-
-            repository.login(loginRequest).onSuccess { response ->
-                securityManager.saveToken(response.access_token)
-                performWalletAuth(username, pin)
-            }.onFailure { error ->
-                _appState.update { it.copy(isLoading = false, errorMessage = "فشل تسجيل الدخول: ${error.message}") }
+            combine(
+                session.isLoggedIn,
+                session.token,
+                session.name,
+                session.phone,
+                session.role,
+                session.balance,
+                session.userId
+            ) { arr ->
+                val loggedIn = arr[0] as Boolean
+                val token    = arr[1] as? String ?: ""
+                val name     = arr[2] as? String ?: ""
+                val phone    = arr[3] as? String ?: ""
+                val role     = arr[4] as? String ?: "customer"
+                val balance  = arr[5] as? Double ?: 0.0
+                val userId   = arr[6] as? Int ?: 0
+                AppUiState(
+                    isLoggedIn = loggedIn,
+                    token      = token,
+                    userName   = name,
+                    userPhone  = phone,
+                    userRole   = role,
+                    balance    = balance,
+                    userId     = userId
+                )
+            }.collect { restored ->
+                _uiState.update { restored }
+                if (restored.isLoggedIn) refreshBalance()
             }
         }
     }
 
-    private fun performWalletAuth(identifier: String, pin: String) {
+    // ─── Auth ─────────────────────────────────────────────
+
+    fun login(phone: String, password: String) {
+        if (phone.isBlank() || password.isBlank()) {
+            setError("يرجى إدخال رقم الهاتف وكلمة المرور")
+            return
+        }
         viewModelScope.launch {
-            val walletRequest = WalletAuthRequest(identifier = identifier, password = pin)
-
-            repository.walletAuth(walletRequest).onSuccess { response ->
-                securityManager.saveToken(response.access_token)
-                securityManager.savePassword(pin)
-
-                _appState.update {
-                    it.copy(
-                        currentUser = User(name = response.org_name ?: identifier, phone = identifier, role = UserRole.MERCHANT, pinHash = ""),
-                        isLoading = false,
-                        errorMessage = null
-                    )
+            setLoading(true)
+            repo.login(phone.trim(), password.trim())
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading  = false,
+                            isLoggedIn = true,
+                            token      = body.accessToken,
+                            userId     = body.user.id,
+                            userName   = body.user.name,
+                            userPhone  = body.user.phone,
+                            userRole   = body.user.role,
+                            balance    = body.user.balance,
+                            error      = null
+                        )
+                    }
+                    loadTransactions()
                 }
-            }.onFailure { error ->
-                _appState.update { it.copy(isLoading = false, errorMessage = "فشل مصادقة المحفظة: ${error.message}") }
-            }
+                .onFailure { setError(it.message ?: "فشل تسجيل الدخول") }
         }
     }
 
-    fun createAccount(userData: UserData) {
+    fun signup(name: String, phone: String, password: String, confirmPassword: String, role: String) {
+        if (name.isBlank() || phone.isBlank() || password.isBlank()) {
+            setError("يرجى تعبئة جميع الحقول"); return
+        }
+        if (password != confirmPassword) {
+            setError("كلمتا المرور غير متطابقتين"); return
+        }
+        if (password.length < 6) {
+            setError("كلمة المرور 6 أحرف على الأقل"); return
+        }
         viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true, errorMessage = null) }
-            // محاكاة عملية إنشاء حساب لتجنب انهيار الواجهة
-            delay(1000)
-            _appState.update { it.copy(isLoading = false, errorMessage = "الرجاء تسجيل الدخول ببياناتك الآن.") }
+            setLoading(true)
+            repo.signup(name.trim(), phone.trim(), password, role)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading  = false,
+                            isLoggedIn = true,
+                            token      = body.accessToken,
+                            userId     = body.user.id,
+                            userName   = body.user.name,
+                            userPhone  = body.user.phone,
+                            userRole   = body.user.role,
+                            balance    = body.user.balance,
+                            error      = null
+                        )
+                    }
+                }
+                .onFailure { setError(it.message ?: "فشل إنشاء الحساب") }
         }
     }
 
     fun logout() {
-        securityManager.clear()
-        _appState.update { AppState() }
+        viewModelScope.launch {
+            repo.logout()
+            _uiState.value = AppUiState()
+        }
     }
 
-    // ─── Voucher System ───────────────────────────────────────────────────────
+    // ─── Wallet ───────────────────────────────────────────
+
+    fun refreshBalance() {
+        viewModelScope.launch {
+            repo.getBalance()
+                .onSuccess { body ->
+                    _uiState.update { it.copy(balance = body.balance, userName = body.name) }
+                }
+                .onFailure { /* silent refresh failure */ }
+        }
+    }
+
+    fun transfer(receiverPhone: String, amount: Double, note: String) {
+        if (receiverPhone.isBlank()) { setError("يرجى إدخال رقم المستلم"); return }
+        if (amount <= 0)             { setError("يرجى إدخال مبلغ صحيح");    return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ"); return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.transfer(receiverPhone.trim(), amount, note)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading      = false,
+                            balance        = body.newBalance,
+                            lastTransfer   = body,
+                            successMessage = "تم تحويل ${body.amount} ﷼ بنجاح",
+                            error          = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل التحويل") }
+        }
+    }
 
     fun generateVoucher(amount: Double) {
+        if (amount <= 0)                     { setError("يرجى إدخال مبلغ صحيح"); return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ");       return }
+
         viewModelScope.launch {
-            _voucherState.update { it.copy(isLoading = true) }
-            repository.generateVoucher(amount).onSuccess { response ->
-                _voucherState.update {
-                    it.copy(
-                        code = response.voucherCode,
-                        timeLeft = 300, // 5 دقائق
-                        isExpired = false,
-                        isLoading = false
-                    )
+            setLoading(true)
+            repo.generateVoucher(amount)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading      = false,
+                            balance        = body.newBalance,
+                            lastVoucher    = body,
+                            successMessage = "تم إنشاء القسيمة: ${body.voucherCode}",
+                            error          = null
+                        )
+                    }
                 }
-                startVoucherTimer()
-            }.onFailure { error ->
-                _voucherState.update { it.copy(isLoading = false) }
-                _appState.update { it.copy(errorMessage = "فشل توليد القسيمة: ${error.message}") }
-            }
+                .onFailure { setError(it.message ?: "فشل إنشاء القسيمة") }
         }
     }
 
-    private fun startVoucherTimer() {
-        timerJob?.cancel()
-        timerJob = viewModelScope.launch {
-            while (_voucherState.value.timeLeft > 0) {
-                delay(1000)
-                _voucherState.update { it.copy(timeLeft = it.timeLeft - 1) }
-            }
-            _voucherState.update { it.copy(isExpired = true) }
-        }
-    }
-
-    // ─── Merchant Operations ──────────────────────────────────────────────────
-
-    fun processMerchantCashout(voucherCode: String, receiverMobile: String = "") {
+    fun loadTransactions(page: Int = 1) {
         viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            val currentUser = _appState.value.currentUser ?: return@launch
-            val password = securityManager.getPassword() ?: ""
-            val token = securityManager.getToken() ?: ""
+            val result = if (_uiState.value.userRole == "merchant")
+                repo.getMerchantTransactions(page)
+            else
+                repo.getTransactions(page)
 
-            // تم تصحيح الحقول لتطابق السيرفر بدقة وتجنب رفض الطلب
-            val request = MerchantChargeRequest(
-                agentWallet = currentUser.phone,
-                password = password,
-                accessToken = token,
-                voucher = voucherCode
-            )
+            result.onSuccess { body ->
+                val txns = if (page == 1) body.transactions
+                           else _uiState.value.transactions + body.transactions
+                _uiState.update { it.copy(transactions = txns) }
+            }
+        }
+    }
 
-            repository.merchantCashout(request).onSuccess { response ->
-                _appState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "تمت عملية السحب بنجاح!"
-                    )
+    fun cashout(agentWallet: String, password: String, voucherCode: String) {
+        if (agentWallet.isBlank() || password.isBlank() || voucherCode.isBlank()) {
+            setError("يرجى إدخال جميع البيانات"); return
+        }
+        viewModelScope.launch {
+            setLoading(true)
+            val token = _uiState.value.token
+            repo.cashout(agentWallet, password, token, voucherCode)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading      = false,
+                            lastCashout    = body,
+                            successMessage = "تم استلام ${body.amount} ﷼ بنجاح",
+                            error          = null
+                        )
+                    }
+                    loadTransactions()
                 }
-            }.onFailure { error ->
-                _appState.update {
-                    it.copy(isLoading = false, errorMessage = "فشلت العملية: ${error.message}")
-                }
-            }
+                .onFailure { setError(it.message ?: "فشل عملية الدفع") }
         }
     }
 
-    fun inquiryTransaction(refId: String) {
-        viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            val currentUser = _appState.value.currentUser ?: return@launch
-            val password = securityManager.getPassword() ?: ""
-            val token = securityManager.getToken() ?: ""
+    // ─── UI Helpers ───────────────────────────────────────
 
-            val request = InquiryRequest(
-                agentWallet = currentUser.phone,
-                password = password,
-                accessToken = token,
-                refId = refId
-            )
+    fun clearError()   = _uiState.update { it.copy(error = null) }
+    fun clearSuccess() = _uiState.update { it.copy(successMessage = null, lastVoucher = null, lastTransfer = null, lastCashout = null) }
 
-            repository.inquiry(request).onSuccess { response ->
-                _appState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "حالة المعاملة: ${response.state ?: "غير معروفة"}"
-                    )
-                }
-            }.onFailure { error ->
-                _appState.update {
-                    it.copy(isLoading = false, errorMessage = "فشل الاستعلام: ${error.message}")
-                }
-            }
-        }
-    }
-
-    fun clearError() {
-        _appState.update { it.copy(errorMessage = null) }
-    }
-
-// ─── الدوال الإضافية الخاصة بواجهة المستخدم (لحل مشكلة Unresolved Reference) ───
-
-    fun transferMoney(recipient: String, amount: Double) {
-        viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            delay(1000) // محاكاة الاتصال
-            _appState.update {
-                it.copy(isLoading = false, errorMessage = "تم إرسال $amount إلى $recipient بنجاح")
-            }
-        }
-    }
-
-    // نستخدم Any هنا لكي نقبل BillService بدون الحاجة لعمل Import للكلاس
-    fun payBill(service: Any, amount: Double) {
-        viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            delay(1000) // محاكاة الاتصال
-            _appState.update {
-                it.copy(isLoading = false, errorMessage = "تم سداد $amount لخدمة ${service.toString()} بنجاح")
-            }
-        }
-    }
-
-    fun collectPayment(amount: Double) {
-        viewModelScope.launch {
-            _appState.update { it.copy(isLoading = true) }
-            delay(1000) // محاكاة الاتصال
-            _appState.update {
-                it.copy(isLoading = false, errorMessage = "تم استلام $amount بنجاح")
-            }
-        }
-    }
-
-    fun toggleBiometric(isEnabled: Boolean) {
-        _appState.update {
-            it.copy(errorMessage = if (isEnabled) "تم تفعيل البصمة" else "تم إلغاء البصمة")
-        }
-    }
+    private fun setLoading(v: Boolean) = _uiState.update { it.copy(isLoading = v, error = null) }
+    private fun setError(msg: String)  = _uiState.update { it.copy(isLoading = false, error = msg) }
 }

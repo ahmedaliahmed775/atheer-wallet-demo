@@ -3,6 +3,7 @@ package com.fintech.app.data
 import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -11,7 +12,7 @@ import javax.inject.Singleton
 private val Context.dataStore by preferencesDataStore(name = "wallet_session")
 
 @Singleton
-class SessionManager @Inject constructor(private val context: Context) {
+class SessionManager @Inject constructor(@ApplicationContext private val context: Context) {
 
     companion object {
         private val KEY_TOKEN    = stringPreferencesKey("token")
