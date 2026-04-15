@@ -297,7 +297,9 @@ fun ServiceItem(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun HomeScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -318,4 +320,4 @@ fun HomeScreenPreview() {
             onTransactionClick = { _ -> }
         )
     }
-}\n
+}

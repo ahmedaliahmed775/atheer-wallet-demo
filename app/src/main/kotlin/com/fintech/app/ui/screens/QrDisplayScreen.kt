@@ -150,7 +150,9 @@ fun QrDisplayScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun QrDisplayScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -159,4 +161,4 @@ fun QrDisplayScreenPreview() {
             onBack = {}
         )
     }
-}\n
+}

@@ -252,7 +252,9 @@ fun BillPaymentScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun BillPaymentScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -264,4 +266,4 @@ fun BillPaymentScreenPreview() {
             onClearSuccess = {}
         )
     }
-}\n
+}

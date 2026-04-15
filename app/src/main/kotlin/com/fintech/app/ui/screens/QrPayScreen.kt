@@ -148,7 +148,9 @@ fun QrPayScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun QrPayScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -160,4 +162,4 @@ fun QrPayScreenPreview() {
             onClearSuccess = {}
         )
     }
-}\n
+}

@@ -166,7 +166,9 @@ fun ExternalTransferScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun ExternalTransferScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -178,4 +180,4 @@ fun ExternalTransferScreenPreview() {
             onClearSuccess = {}
         )
     }
-}\n
+}

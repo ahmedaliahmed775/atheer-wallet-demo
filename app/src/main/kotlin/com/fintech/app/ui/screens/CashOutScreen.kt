@@ -158,7 +158,9 @@ fun CashOutScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun CashOutScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -170,4 +172,4 @@ fun CashOutScreenPreview() {
             onClearSuccess = {}
         )
     }
-}\n
+}

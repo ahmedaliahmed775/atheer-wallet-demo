@@ -47,7 +47,9 @@ fun SplashScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun SplashScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -58,4 +60,4 @@ fun SplashScreenPreview() {
             onLoginRequired = {}
         )
     }
-}\n
+}

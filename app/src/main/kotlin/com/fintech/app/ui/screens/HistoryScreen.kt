@@ -82,7 +82,9 @@ fun HistoryScreen(
         }
     }
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun HistoryScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -93,4 +95,4 @@ fun HistoryScreenPreview() {
             onTransactionClick = { _ -> }
         )
     }
-}\n
+}

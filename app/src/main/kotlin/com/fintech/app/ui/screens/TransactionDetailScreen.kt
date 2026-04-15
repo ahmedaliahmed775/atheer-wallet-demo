@@ -197,7 +197,9 @@ private fun shareReceipt(context: Context, text: String) {
     }
     context.startActivity(Intent.createChooser(intent, "مشاركة الإيصال عبر"))
 }
-\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.runtime.Composable
 fun TransactionDetailScreenPreview() {
     com.fintech.app.ui.theme.FinTechTheme {
@@ -208,4 +210,4 @@ fun TransactionDetailScreenPreview() {
             onBack = {}
         )
     }
-}\n
+}
