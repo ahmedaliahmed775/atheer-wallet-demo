@@ -28,12 +28,12 @@ fun QrPayScreen(
     onClearError: () -> Unit,
     onClearSuccess: () -> Unit
 ) {
-    var merchantPhone by remember { mutableStateOf("") }
+    var posNumber by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
     LaunchedEffect(uiState.lastQrPay) {
-        if (uiState.lastQrPay != null) { merchantPhone = ""; amount = ""; note = "" }
+        if (uiState.lastQrPay != null) { posNumber = ""; amount = ""; note = "" }
     }
 
     Scaffold(
@@ -61,7 +61,7 @@ fun QrPayScreen(
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text("الدفع عبر QR", fontWeight = FontWeight.SemiBold, color = Color(0xFF3C3489))
-                        Text("أدخل رقم التاجر أو امسح الكود QR لإتمام الدفع", fontSize = 12.sp, color = Color(0xFF534AB7))
+                        Text("أدخل رقم نقطة البيع (6 أرقام) للتاجر أو امسح الكود QR لإتمام الدفع", fontSize = 12.sp, color = Color(0xFF534AB7))
                     }
                 }
             }
@@ -83,9 +83,9 @@ fun QrPayScreen(
             Spacer(Modifier.height(20.dp))
 
             OutlinedTextField(
-                value = merchantPhone,
-                onValueChange = { merchantPhone = it; onClearError() },
-                label = { Text("رقم هاتف التاجر") },
+                value = posNumber,
+                onValueChange = { posNumber = it; onClearError() },
+                label = { Text("رقم نقطة البيع (6 أرقام)") },
                 leadingIcon = { Icon(Icons.Default.Store, null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 singleLine = true,
@@ -137,8 +137,8 @@ fun QrPayScreen(
 
             Spacer(Modifier.height(24.dp))
             Button(
-                onClick = { onQrPay(merchantPhone, amount.toDoubleOrNull() ?: 0.0, note.ifBlank { "" }) },
-                enabled = !uiState.isLoading && merchantPhone.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0,
+                onClick = { onQrPay(posNumber, amount.toDoubleOrNull() ?: 0.0, note.ifBlank { "" }) },
+                enabled = !uiState.isLoading && posNumber.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0,
                 colors = ButtonDefaults.buttonColors(containerColor = Merchant),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {

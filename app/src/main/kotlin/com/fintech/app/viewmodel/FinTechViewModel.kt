@@ -186,25 +186,6 @@ class FinTechViewModel @Inject constructor(
                 .onFailure { setError(it.message ?: "فشل إرسال الحوالة") }
         }
     }
-
-    fun generateVoucher(amount: Double) {
-        if (amount <= 0)                     { setError("يرجى إدخال مبلغ صحيح"); return }
-        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ");       return }
-
-        viewModelScope.launch {
-            setLoading(true)
-            repo.generateVoucher(amount)
-                .onSuccess { body ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading      = false,
-                            balance        = body.newBalance,
-                            lastVoucher    = body,
-                            successMessage = "تم إنشاء القسيمة: ${body.voucherCode}",
-                            error          = null
-                        )
-                    }
-                }
                 .onFailure { setError(it.message ?: "فشل إنشاء القسيمة") }
         }
     }
@@ -233,14 +214,14 @@ class FinTechViewModel @Inject constructor(
         }
     }
 
-    fun qrPay(merchantPhone: String, amount: Double, note: String = "") {
+    fun qrPay(posNumber: String, amount: Double, note: String = "") {
         if (merchantPhone.isBlank()) { setError("يرجى إدخال رقم التاجر"); return }
         if (amount <= 0)             { setError("يرجى إدخال مبلغ صحيح");  return }
         if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ"); return }
 
         viewModelScope.launch {
             setLoading(true)
-            repo.qrPay(merchantPhone.trim(), amount, note)
+            repo.qrPay(posNumber.trim(), amount, note)
                 .onSuccess { body ->
                     _uiState.update {
                         it.copy(
@@ -339,29 +320,6 @@ class FinTechViewModel @Inject constructor(
     }
 
     // ─── Merchant ─────────────────────────────────────────
-
-    fun cashout(agentWallet: String, password: String, voucherCode: String) {
-        if (agentWallet.isBlank() || password.isBlank() || voucherCode.isBlank()) {
-            setError("يرجى إدخال جميع البيانات"); return
-        }
-        viewModelScope.launch {
-            setLoading(true)
-            val token = _uiState.value.token
-            repo.cashout(agentWallet, password, token, voucherCode)
-                .onSuccess { body ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading      = false,
-                            lastCashout    = body,
-                            successMessage = "تم استلام ${body.amount.toLong()} ﷼ بنجاح",
-                            error          = null
-                        )
-                    }
-                    loadTransactions()
-                }
-                .onFailure { setError(it.message ?: "فشل عملية الدفع") }
-        }
-    }
 
     // ─── UI Helpers ───────────────────────────────────────
 

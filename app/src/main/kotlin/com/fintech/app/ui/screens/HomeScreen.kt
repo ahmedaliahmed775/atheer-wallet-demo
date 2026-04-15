@@ -34,7 +34,6 @@ fun HomeScreen(
     onCashOut: () -> Unit,
     onCashIn: () -> Unit,
     onExternalTransfer: () -> Unit,
-    onVoucher: () -> Unit,
     onQrDisplay: () -> Unit,
     onReceivePayment: () -> Unit,
     onHistory: () -> Unit,
@@ -185,20 +184,8 @@ fun HomeScreen(
                     ) {
                         ServiceItem(Icons.Default.QrCode2, "QR التاجر", Merchant, Modifier.weight(1f), onQrDisplay)
                         ServiceItem(Icons.Default.PointOfSale, "استلام دفعة", Color(0xFF8B5CF6), Modifier.weight(1f), onReceivePayment)
-                        ServiceItem(Icons.Default.CardGiftcard, "قسيمة", Primary, Modifier.weight(1f), onVoucher)
-                    }
-                } else {
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ServiceItem(Icons.Default.CardGiftcard, "قسيمة دفع", Color(0xFF534AB7), Modifier.weight(1f), onVoucher)
-                        Spacer(Modifier.weight(1f))
-                        Spacer(Modifier.weight(1f))
                     }
                 }
-
                 // ─── Recent Transactions ────────────────────
                 Spacer(Modifier.height(24.dp))
                 Row(
@@ -312,7 +299,6 @@ fun HomeScreenPreview() {
             onCashOut = {},
             onCashIn = {},
             onExternalTransfer = {},
-            onVoucher = {},
             onQrDisplay = {},
             onReceivePayment = {},
             onHistory = {},

@@ -112,7 +112,7 @@ class WalletRepository @Inject constructor(
         amount: Double,
         note: String
     ): Result<QrPayBody> = runCatching {
-        val response = api.qrPay(QrPayRequest(merchantPhone, amount, note))
+        val response = api.qrPay(QrPayRequest(posNumber, amount, note))
         if (response.responseCode != 0) throw Exception(response.responseMessage ?: "فشل الدفع")
         val body = response.body ?: throw Exception(response.responseMessage ?: "فشل الدفع")
         session.updateBalance(body.newBalance)

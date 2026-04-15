@@ -18,7 +18,6 @@ sealed class Screen(val route: String) {
     object Home              : Screen("home")
     object Transfer          : Screen("transfer")
     object ExternalTransfer  : Screen("external_transfer")
-    object Voucher           : Screen("voucher")
     object BillPayment       : Screen("bill_payment")
     object QrPay             : Screen("qr_pay")
     object QrDisplay         : Screen("qr_display")
@@ -100,7 +99,6 @@ fun AppNavigation(
                 onCashOut          = { navController.navigate(Screen.CashOut.route) },
                 onCashIn           = { navController.navigate(Screen.CashIn.route) },
                 onExternalTransfer = { navController.navigate(Screen.ExternalTransfer.route) },
-                onVoucher          = { navController.navigate(Screen.Voucher.route) },
                 onQrDisplay        = { navController.navigate(Screen.QrDisplay.route) },
                 onReceivePayment   = { navController.navigate(Screen.ReceivePayment.route) },
                 onHistory          = { navController.navigate(Screen.History.route) },
@@ -127,12 +125,7 @@ fun AppNavigation(
                 onClearError   = { vm.clearError() },
                 onClearSuccess = { vm.clearSuccess() }
             )
-        }
-
-        composable(Screen.Voucher.route) {
-            VoucherScreen(
-                uiState        = uiState,
-                onGenerate     = { amount -> vm.generateVoucher(amount) },
+        },
                 onBack         = { navController.popBackStack() },
                 onClearError   = { vm.clearError() },
                 onClearSuccess = { vm.clearSuccess() }
@@ -189,8 +182,7 @@ fun AppNavigation(
         composable(Screen.ReceivePayment.route) {
             MerchantHomeScreen(
                 uiState        = uiState,
-                onCashout      = { wallet, pass, voucher -> vm.cashout(wallet, pass, voucher) },
-                onHistory      = { navController.navigate(Screen.History.route) },
+                                onHistory      = { navController.navigate(Screen.History.route) },
                 onSettings     = { navController.navigate(Screen.Settings.route) },
                 onClearError   = { vm.clearError() },
                 onClearSuccess = { vm.clearSuccess() }

@@ -27,7 +27,7 @@ fun CustomerHomeScreen(
     uiState: AppUiState,
     onRefresh: () -> Unit,
     onTransfer: () -> Unit,
-    onVoucher: () -> Unit,
+    onQrPay: () -> Unit,
     onHistory: () -> Unit,
     onSettings: () -> Unit
 ) {
@@ -68,8 +68,8 @@ fun CustomerHomeScreen(
             Column(Modifier.padding(20.dp)) {
                 Text("خدماتك السريعة", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    QuickAction(icon = Icons.Default.Send, label = "تحويل", color = Primary, modifier = Modifier.weight(1f), onClick = onTransfer)
-                    QuickAction(icon = Icons.Default.QrCode2, label = "قسيمة دفع", color = Color(0xFF534AB7), modifier = Modifier.weight(1f), onClick = onVoucher)
+                    QuickAction(icon = Icons.Default.Send, label = "تحويل لعميل", color = Primary, modifier = Modifier.weight(1f), onClick = onTransfer)
+                    QuickAction(icon = Icons.Default.QrCode2, label = "دفع مشتريات", color = Color(0xFF534AB7), modifier = Modifier.weight(1f), onClick = onQrPay)
                 }
 
                 Spacer(Modifier.height(24.dp))
@@ -131,7 +131,7 @@ fun CustomerHomeScreenPreview() {
             ),
             onRefresh = {},
             onTransfer = {},
-            onVoucher = {},
+            onQrPay = {},
             onHistory = {},
             onSettings = {}
         )

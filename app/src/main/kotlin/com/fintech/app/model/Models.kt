@@ -34,6 +34,7 @@ data class UserDto(
     val name: String,
     val phone: String,
     val role: String,
+    val posNumber: String? = null,
     val balance: Double
 )
 
@@ -102,26 +103,6 @@ data class ExternalTransferBody(
     val timestamp: String
 )
 
-// ─── Voucher ──────────────────────────────────────────────
-
-data class GenerateVoucherRequest(
-    val amount: Double
-)
-
-data class VoucherResponse(
-    @SerializedName("ResponseCode") val responseCode: Int,
-    @SerializedName("ResponseMessage") val responseMessage: String?,
-    val body: VoucherBody?
-)
-
-data class VoucherBody(
-    val voucherCode: String,
-    val amount: Double,
-    val expiresAt: String,
-    val newBalance: Double,
-    val status: String
-)
-
 // ─── Bill Payment ─────────────────────────────────────────
 
 data class BillPaymentRequest(
@@ -152,7 +133,7 @@ data class BillPaymentBody(
 // ─── QR Payment ───────────────────────────────────────────
 
 data class QrPayRequest(
-    val merchantPhone: String,
+    val posNumber: String,
     val amount: Double,
     val note: String = ""
 )
@@ -168,7 +149,7 @@ data class QrPayBody(
     val refId: String,
     val amount: Double,
     val merchantName: String,
-    val merchantPhone: String,
+    val posNumber: String,
     val newBalance: Double,
     val timestamp: String
 )
@@ -216,28 +197,7 @@ data class CashInBody(
 
 // ─── Merchant ─────────────────────────────────────────────
 
-data class CashoutRequest(
-    val agentWallet: String,
-    val password: String,
-    val accessToken: String,
-    val voucher: String
-)
 
-data class CashoutResponse(
-    @SerializedName("ResponseCode") val responseCode: Int,
-    @SerializedName("ResponseMessage") val responseMessage: String?,
-    val body: CashoutBody?
-)
-
-data class CashoutBody(
-    val transactionId: String,
-    val refId: String,
-    val voucherCode: String,
-    val amount: Double,
-    val merchantWallet: String,
-    val merchantName: String,
-    val timestamp: String
-)
 
 data class QrInfoResponse(
     @SerializedName("ResponseCode") val responseCode: Int,
@@ -246,7 +206,8 @@ data class QrInfoResponse(
 
 data class QrInfoBody(
     val merchantName: String,
-    val merchantPhone: String,
+    val posNumber: String,
+    val merchantPosNumber: String? = null,
     val qrData: String
 )
 
@@ -335,14 +296,13 @@ data class AppUiState(
     val userName: String = "",
     val userPhone: String = "",
     val userRole: String = "customer",
+    val posNumber: String? = null,
     val balance: Double = 0.0,
     val transactions: List<TransactionDto> = emptyList(),
     val services: List<ServiceCategory> = emptyList(),
     val error: String? = null,
     val successMessage: String? = null,
-    val lastVoucher: VoucherBody? = null,
     val lastTransfer: TransferBody? = null,
-    val lastCashout: CashoutBody? = null,
     val lastBillPayment: BillPaymentBody? = null,
     val lastQrPay: QrPayBody? = null,
     val lastCashOut: CashOutBody? = null,

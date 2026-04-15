@@ -99,7 +99,7 @@ fun QrDisplayScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        uiState.userPhone,
+                        uiState.posNumber ?: "------",
                         fontSize = 14.sp,
                         color = TextMuted
                     )
@@ -118,10 +118,10 @@ fun QrDisplayScreen(
                     Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("أو يمكن للعميل الدفع باستخدام رقمك", fontSize = 12.sp, color = TextMuted)
+                    Text("أو يمكن للعميل مسح الكود أو إدخال رقم نقطة البيع", fontSize = 12.sp, color = TextMuted)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        uiState.userPhone,
+                        uiState.posNumber ?: "------",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         color = Merchant,
