@@ -2,7 +2,14 @@ package com.fintech.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ─── Primary Colors ───────────────────────────────────────────────────────────
+// ─── App Colors (From Allscreens) ─────────────────────────────────────────────
+val Primary   = Color(0xFF1D9E75)
+val PrimaryDk = Color(0xFF0F6E56)
+val Merchant  = Color(0xFF534AB7)
+val BgCard    = Color(0xFFF8F7F4)
+val TextMuted = Color(0xFF888780)
+
+// ─── Original Colors ───────────────────────────────────────────────────────────
 val RoyalBlue    = Color(0xFF1E40AF)
 val DarkBlue     = Color(0xFF1E3A8A)
 val BrightGreen  = Color(0xFF22C55E)
