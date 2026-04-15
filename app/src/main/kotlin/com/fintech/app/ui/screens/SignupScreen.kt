@@ -29,7 +29,7 @@ fun SignupScreen(
     uiState: AppUiState,
     onSignup: (String, String, String, String, String) -> Unit,
     onGoLogin: () -> Unit,
-    onSuccess: (String) -> Unit,
+    onSuccess: () -> Unit,
     onClearError: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
@@ -39,7 +39,7 @@ fun SignupScreen(
     var role by remember { mutableStateOf("customer") }
 
     LaunchedEffect(uiState.isLoggedIn) {
-        if (uiState.isLoggedIn) onSuccess(uiState.userRole)
+        if (uiState.isLoggedIn) onSuccess()
     }
 
     Column(

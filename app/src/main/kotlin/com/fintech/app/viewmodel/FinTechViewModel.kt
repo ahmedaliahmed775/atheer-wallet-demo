@@ -48,7 +48,10 @@ class FinTechViewModel @Inject constructor(
                 )
             }.collect { restored ->
                 _uiState.update { restored }
-                if (restored.isLoggedIn) refreshBalance()
+                if (restored.isLoggedIn) {
+                    refreshBalance()
+                    loadServices()
+                }
             }
         }
     }
@@ -78,6 +81,7 @@ class FinTechViewModel @Inject constructor(
                         )
                     }
                     loadTransactions()
+                    loadServices()
                 }
                 .onFailure { setError(it.message ?: "فشل تسجيل الدخول") }
         }
@@ -110,6 +114,7 @@ class FinTechViewModel @Inject constructor(
                             error      = null
                         )
                     }
+                    loadServices()
                 }
                 .onFailure { setError(it.message ?: "فشل إنشاء الحساب") }
         }
@@ -148,13 +153,37 @@ class FinTechViewModel @Inject constructor(
                             isLoading      = false,
                             balance        = body.newBalance,
                             lastTransfer   = body,
-                            successMessage = "تم تحويل ${body.amount} ﷼ بنجاح",
+                            successMessage = "تم تحويل ${body.amount.toLong()} ﷼ بنجاح",
                             error          = null
                         )
                     }
                     loadTransactions()
                 }
                 .onFailure { setError(it.message ?: "فشل التحويل") }
+        }
+    }
+
+    fun transferExternal(recipientPhone: String, recipientName: String, amount: Double, note: String) {
+        if (recipientPhone.isBlank()) { setError("يرجى إدخال رقم المستلم"); return }
+        if (amount <= 0)              { setError("يرجى إدخال مبلغ صحيح");    return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ"); return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.transferExternal(recipientPhone.trim(), recipientName, amount, note)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading           = false,
+                            balance             = body.newBalance,
+                            lastExternalTransfer = body,
+                            successMessage      = "تم إرسال ${body.amount.toLong()} ﷼ — كود السحب: ${body.withdrawalCode}",
+                            error               = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل إرسال الحوالة") }
         }
     }
 
@@ -180,6 +209,100 @@ class FinTechViewModel @Inject constructor(
         }
     }
 
+    fun payBill(category: String, provider: String, accountNumber: String, amount: Double) {
+        if (accountNumber.isBlank()) { setError("يرجى إدخال رقم الحساب"); return }
+        if (amount <= 0)             { setError("يرجى إدخال مبلغ صحيح");  return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ"); return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.payBill(category, provider, accountNumber, amount)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading       = false,
+                            balance         = body.newBalance,
+                            lastBillPayment = body,
+                            successMessage  = "تم سداد ${body.amount.toLong()} ﷼ بنجاح",
+                            error           = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل سداد الفاتورة") }
+        }
+    }
+
+    fun qrPay(merchantPhone: String, amount: Double, note: String = "") {
+        if (merchantPhone.isBlank()) { setError("يرجى إدخال رقم التاجر"); return }
+        if (amount <= 0)             { setError("يرجى إدخال مبلغ صحيح");  return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ"); return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.qrPay(merchantPhone.trim(), amount, note)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading      = false,
+                            balance        = body.newBalance,
+                            lastQrPay      = body,
+                            successMessage = "تم الدفع ${body.amount.toLong()} ﷼ لـ ${body.merchantName}",
+                            error          = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل الدفع") }
+        }
+    }
+
+    fun generateCashout(amount: Double) {
+        if (amount <= 0)                     { setError("يرجى إدخال مبلغ صحيح"); return }
+        if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ");       return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.generateCashout(amount)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading      = false,
+                            balance        = body.newBalance,
+                            lastCashOut    = body,
+                            successMessage = "كود السحب: ${body.code}",
+                            error          = null
+                        )
+                    }
+                }
+                .onFailure { setError(it.message ?: "فشل إنشاء كود السحب") }
+        }
+    }
+
+    fun cashIn(amount: Double) {
+        if (amount <= 0) { setError("يرجى إدخال مبلغ صحيح"); return }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.cashIn(amount)
+                .onSuccess { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading      = false,
+                            balance        = body.newBalance,
+                            lastCashIn     = body,
+                            successMessage = "تم إيداع ${body.amount.toLong()} ﷼ بنجاح",
+                            error          = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل الإيداع") }
+        }
+    }
+
+    // ─── Transactions ─────────────────────────────────────
+
     fun loadTransactions(page: Int = 1) {
         viewModelScope.launch {
             val result = if (_uiState.value.userRole == "merchant")
@@ -195,6 +318,28 @@ class FinTechViewModel @Inject constructor(
         }
     }
 
+    fun loadTransactionDetail(id: String) {
+        viewModelScope.launch {
+            repo.getTransactionDetail(id)
+                .onSuccess { detail ->
+                    _uiState.update { it.copy(transactionDetail = detail) }
+                }
+        }
+    }
+
+    // ─── Services ─────────────────────────────────────────
+
+    fun loadServices() {
+        viewModelScope.launch {
+            repo.getServices()
+                .onSuccess { services ->
+                    _uiState.update { it.copy(services = services) }
+                }
+        }
+    }
+
+    // ─── Merchant ─────────────────────────────────────────
+
     fun cashout(agentWallet: String, password: String, voucherCode: String) {
         if (agentWallet.isBlank() || password.isBlank() || voucherCode.isBlank()) {
             setError("يرجى إدخال جميع البيانات"); return
@@ -208,7 +353,7 @@ class FinTechViewModel @Inject constructor(
                         it.copy(
                             isLoading      = false,
                             lastCashout    = body,
-                            successMessage = "تم استلام ${body.amount} ﷼ بنجاح",
+                            successMessage = "تم استلام ${body.amount.toLong()} ﷼ بنجاح",
                             error          = null
                         )
                     }
@@ -221,7 +366,20 @@ class FinTechViewModel @Inject constructor(
     // ─── UI Helpers ───────────────────────────────────────
 
     fun clearError()   = _uiState.update { it.copy(error = null) }
-    fun clearSuccess() = _uiState.update { it.copy(successMessage = null, lastVoucher = null, lastTransfer = null, lastCashout = null) }
+    fun clearSuccess() = _uiState.update {
+        it.copy(
+            successMessage       = null,
+            lastVoucher          = null,
+            lastTransfer         = null,
+            lastCashout          = null,
+            lastBillPayment      = null,
+            lastQrPay            = null,
+            lastCashOut          = null,
+            lastCashIn           = null,
+            lastExternalTransfer = null,
+            transactionDetail    = null
+        )
+    }
 
     private fun setLoading(v: Boolean) = _uiState.update { it.copy(isLoading = v, error = null) }
     private fun setError(msg: String)  = _uiState.update { it.copy(isLoading = false, error = msg) }

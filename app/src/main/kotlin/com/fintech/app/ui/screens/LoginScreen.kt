@@ -27,7 +27,7 @@ fun LoginScreen(
     uiState: AppUiState,
     onLogin: (String, String) -> Unit,
     onGoSignup: () -> Unit,
-    onSuccess: (String) -> Unit,
+    onSuccess: () -> Unit,
     onClearError: () -> Unit
 ) {
     var phone by remember { mutableStateOf("") }
@@ -35,7 +35,7 @@ fun LoginScreen(
     var passVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.isLoggedIn) {
-        if (uiState.isLoggedIn) onSuccess(uiState.userRole)
+        if (uiState.isLoggedIn) onSuccess()
     }
 
     Column(

@@ -11,10 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.fintech.app.ui.theme.FinTechTheme
 import com.fintech.app.ui.theme.Primary
 import com.fintech.app.ui.theme.TextMuted
 import kotlinx.coroutines.delay
@@ -49,16 +47,15 @@ fun SplashScreen(
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
+\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@androidx.compose.runtime.Composable
 fun SplashScreenPreview() {
-    FinTechTheme {
+    com.fintech.app.ui.theme.FinTechTheme {
         SplashScreen(
-            isLoggedIn = false,
-            userRole = "customer",
-            onNavigate = {},
+            isLoggedIn = true,
+            userRole = "CUSTOMER",
+            onNavigate = { _ -> },
             onLoginRequired = {}
         )
     }
-}
+}\n

@@ -12,24 +12,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fintech.app.model.AppUiState
-import com.fintech.app.model.TransactionDto
 import com.fintech.app.ui.theme.BgCard
-import com.fintech.app.ui.theme.FinTechTheme
 import com.fintech.app.ui.theme.Primary
 import com.fintech.app.ui.theme.TextMuted
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(uiState: AppUiState, onLoadMore: (Int) -> Unit, onBack: () -> Unit) {
+fun HistoryScreen(
+    uiState: AppUiState,
+    onLoadMore: (Int) -> Unit,
+    onBack: () -> Unit,
+    onTransactionClick: (String) -> Unit = {}
+) {
     var currentPage by remember { mutableIntStateOf(1) }
-    val total = uiState.transactions.sumOf { if (it.type == "CREDIT") it.amount else 0.0 }
+    val totalCredit = uiState.transactions.filter { it.type == "CREDIT" }.sumOf { it.amount }
+    val totalDebit  = uiState.transactions.filter { it.type == "DEBIT" }.sumOf { it.amount }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("سجل المعاملات") }, navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBack, null) } }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("سجل المعاملات") },
+                navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBack, null) } }
+            )
+        }
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             item {
@@ -45,15 +53,20 @@ fun HistoryScreen(uiState: AppUiState, onLoadMore: (Int) -> Unit, onBack: () -> 
                         }
                         VerticalDivider(Modifier.height(36.dp).width(1.dp), color = Color(0xFFD3D1C7))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("%.0f ﷼".format(total), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Primary)
-                            Text("إجمالي الاستلام", fontSize = 12.sp, color = TextMuted)
+                            Text("%,.0f".format(totalCredit), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Primary)
+                            Text("وارد ﷼", fontSize = 12.sp, color = TextMuted)
+                        }
+                        VerticalDivider(Modifier.height(36.dp).width(1.dp), color = Color(0xFFD3D1C7))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("%,.0f".format(totalDebit), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA32D2D))
+                            Text("صادر ﷼", fontSize = 12.sp, color = TextMuted)
                         }
                     }
                 }
             }
             items(uiState.transactions) { txn ->
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    TransactionRow(txn)
+                    TransactionRowClickable(txn) { onTransactionClick(txn.id) }
                     HorizontalDivider(color = Color(0xFFF1EFE8))
                 }
             }
@@ -69,54 +82,15 @@ fun HistoryScreen(uiState: AppUiState, onLoadMore: (Int) -> Unit, onBack: () -> 
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
+\n@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@androidx.compose.runtime.Composable
 fun HistoryScreenPreview() {
-    FinTechTheme {
+    com.fintech.app.ui.theme.FinTechTheme {
         HistoryScreen(
-            uiState = AppUiState(
-                transactions = listOf(
-                    TransactionDto(
-                        id = "1",
-                        refId = "TXN1001",
-                        type = "CREDIT",
-                        txnType = "TRANSFER",
-                        amount = 12500.0,
-                        counterparty = "صالح عبدالله",
-                        counterPhone = "771000222",
-                        note = "مستحقات سابقة",
-                        status = "completed",
-                        timestamp = "2023-10-27T09:00:00"
-                    ),
-                    TransactionDto(
-                        id = "2",
-                        refId = "TXN1002",
-                        type = "DEBIT",
-                        txnType = "TRANSFER",
-                        amount = 3000.0,
-                        counterparty = "بقالة الأمل",
-                        counterPhone = "770555666",
-                        note = "مشتريات",
-                        status = "completed",
-                        timestamp = "2023-10-26T18:45:00"
-                    ),
-                    TransactionDto(
-                        id = "3",
-                        refId = "TXN1003",
-                        type = "CREDIT",
-                        txnType = "CASHOUT",
-                        amount = 50000.0,
-                        counterparty = "شركة المحضار للصرافة",
-                        counterPhone = "777888999",
-                        note = "إيداع نقدي",
-                        status = "completed",
-                        timestamp = "2023-10-25T11:20:00"
-                    )
-                )
-            ),
-            onLoadMore = {},
-            onBack = {}
+            uiState = com.fintech.app.model.AppUiState(),
+            onLoadMore = { _ -> },
+            onBack = {},
+            onTransactionClick = { _ -> }
         )
     }
-}
+}\n
