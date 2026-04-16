@@ -1,153 +1,122 @@
-# 💳 FinTech Pay — تطبيق التحويلات المالية
+# Atheer Wallet — تطبيق Android
 
-<div align="center">
+تطبيق محفظة إلكترونية مبني بـ Kotlin + Jetpack Compose + Hilt
 
-![Android](https://img.shields.io/badge/Android-API%2026+-green?logo=android)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.0-blue?logo=kotlin)
-![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-2024-orange)
-![MVVM](https://img.shields.io/badge/Architecture-MVVM-purple)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
+## المتطلبات
 
-**تطبيق محفظة رقمية احترافي مبني بـ Kotlin + Jetpack Compose**
-
-</div>
-
----
-
-## 📱 نظرة عامة
-
-تطبيق **FinTech Pay** هو محفظة رقمية متكاملة تحاكي تطبيقات مثل STC Pay وجوالي، يدعم:
-- ✅ تسجيل دخول عميل / تاجر
-- ✅ تحويل الأموال بين المستخدمين
-- ✅ سداد الفواتير (هاتف، كهرباء، إنترنت)
-- ✅ تحصيل المدفوعات عبر QR (للتجار)
-- ✅ سجل العمليات الكامل
-- ✅ دعم اللغتين العربية والإنجليزية (RTL/LTR)
-- ✅ رسوم متحركة احترافية
-
----
-
-## 🏗️ التقنيات المستخدمة
-
-| التقنية | الاستخدام |
-|---|---|
-| **Kotlin** | لغة البرمجة الأساسية |
-| **Jetpack Compose** | واجهة المستخدم |
-| **MVVM + StateFlow** | إدارة الحالة |
-| **Navigation Compose** | التنقل بين الشاشات |
-| **Material Design 3** | نظام التصميم |
-| **Coroutines** | العمليات غير المتزامنة |
-| **GitHub Actions** | CI/CD |
-
----
-
-## 📂 هيكل المشروع
-
-```
-FinTechApp/
-├── app/src/main/kotlin/com/fintech/app/
-│   ├── MainActivity.kt
-│   ├── App.kt
-│   ├── model/
-│   │   └── Models.kt          # User, Transaction, AppState
-│   ├── viewmodel/
-│   │   └── FinTechViewModel.kt # MVVM ViewModel
-│   ├── navigation/
-│   │   └── AppNavigation.kt   # Navigation Graph
-│   ├── ui/
-│   │   ├── theme/
-│   │   │   ├── Color.kt
-│   │   │   ├── Typography.kt
-│   │   │   └── Theme.kt
-│   │   ├── screens/
-│   │   │   ├── SplashScreen.kt         # تسجيل الدخول
-│   │   │   ├── SignupScreens.kt        # إنشاء الحساب
-│   │   │   ├── CustomerHomeScreen.kt   # الرئيسية (عميل)
-│   │   │   ├── MerchantHomeScreen.kt   # المحطة (تاجر)
-│   │   │   └── OtherScreens.kt        # السجل + الإعدادات
-│   │   └── components/
-│   │       └── Modals.kt              # TransferModal, BillModal, Success
-│   └── utils/
-│       └── Validators.kt
-└── .github/workflows/android.yml     # CI/CD
-```
-
----
-
-## 🚀 خطوات التشغيل
-
-### المتطلبات:
 - Android Studio Hedgehog أو أحدث
 - JDK 17
-- Android SDK API 26+
+- Android SDK 35
+- Min SDK: 26 (Android 8.0)
 
-### خطوات التثبيت:
+## الإعداد
+
+### عنوان السيرفر
+
+يتم تحديده في `app/build.gradle.kts`:
+
+```kotlin
+// Debug — يشير إلى localhost عبر المحاكي
+buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/\"")
+
+// Release — ضع عنوان الإنتاج
+buildConfigField("String", "BASE_URL", "\"https://your-server.com/\"")
+```
+
+### البناء
 
 ```bash
-# 1. استنساخ المشروع
-git clone https://github.com/YOUR_USERNAME/FinTechApp.git
-
-# 2. فتح المشروع في Android Studio
-cd FinTechApp
-
-# 3. مزامنة Gradle
-./gradlew build
-
-# 4. تشغيل على المحاكي أو الجهاز
-./gradlew installDebug
+./gradlew assembleDebug
 ```
 
----
+APK الناتج: `app/build/outputs/apk/debug/app-debug.apk`
 
-## 🔐 بيانات الدخول التجريبية
-
-| النوع | رقم الهاتف | الرمز السري |
-|---|---|---|
-| عميل | `0501234567` | `123456` |
-| تاجر | `0559876543` | `123456` |
-
----
-
-## 🎨 لقطات الشاشة
-
-| تسجيل الدخول | الرئيسية (عميل) | المحطة (تاجر) |
-|:---:|:---:|:---:|
-| شاشة تسجيل الدخول | الرصيد والخدمات | لوحة أرقام التحصيل |
-
----
-
-## 🔄 سير العمل (Flows)
+## البنية
 
 ```
-تسجيل الدخول → الرئيسية
-                    ↓
-              ┌─────┴──────┐
-          حوالة         فواتير
-              ↓             ↓
-          تأكيد         اختيار خدمة
-              ↓             ↓
-          نجاح ✅        نجاح ✅
+app/src/main/kotlin/com/fintech/app/
+├── App.kt                          # Application class (Hilt)
+├── MainActivity.kt                 # نقطة الدخول
+├── data/
+│   ├── SessionManager.kt           # تخزين الجلسة (DataStore)
+│   └── WalletRepository.kt         # طبقة البيانات
+├── model/
+│   └── Models.kt                   # Data classes + API DTOs
+├── network/
+│   ├── NetworkModule.kt            # Hilt DI (OkHttp + Retrofit)
+│   └── WalletApiService.kt         # واجهات Retrofit
+├── navigation/
+│   └── AppNavigation.kt            # Navigation graph
+├── ui/
+│   ├── screens/
+│   │   ├── SplashScreen.kt         # شاشة البداية
+│   │   ├── LoginScreen.kt          # تسجيل الدخول
+│   │   ├── SignupScreen.kt         # إنشاء حساب
+│   │   ├── HomeScreen.kt           # الرئيسية (customer + merchant)
+│   │   ├── TransferScreen.kt       # تحويل P2P
+│   │   ├── ExternalTransferScreen.kt # حوالة خارجية
+│   │   ├── BillPaymentScreen.kt    # سداد فواتير
+│   │   ├── QrPayScreen.kt          # دفع لتاجر (POS number)
+│   │   ├── QrDisplayScreen.kt      # عرض QR التاجر
+│   │   ├── CashOutScreen.kt        # سحب نقدي (كود)
+│   │   ├── CashInScreen.kt         # إيداع نقدي
+│   │   ├── HistoryScreen.kt        # سجل المعاملات
+│   │   ├── TransactionDetailScreen.kt # تفاصيل معاملة
+│   │   ├── MerchantHomeScreen.kt   # لوحة التاجر
+│   │   ├── SettingsScreen.kt       # الإعدادات
+│   │   └── Components.kt           # مكونات مشتركة
+│   └── theme/
+│       ├── Color.kt
+│       ├── Theme.kt
+│       └── Typography.kt
+├── utils/
+│   ├── Constants.kt                # ثوابت (مرجعي فقط)
+│   ├── NetworkInterceptor.kt
+│   └── Validators.kt
+└── viewmodel/
+    └── FinTechViewModel.kt         # ViewModel الرئيسي
 ```
 
----
+## الشاشات والتدفق
 
-## 🤝 المساهمة
-
-```bash
-git checkout -b feature/اسم-الميزة
-git commit -m "feat: وصف التغيير"
-git push origin feature/اسم-الميزة
-# افتح Pull Request
+```
+Splash → Login/Signup → Home
+                          ├── تحويل P2P
+                          ├── حوالة خارجية
+                          ├── سداد فواتير
+                          ├── دفع QR (إدخال POS number)
+                          ├── سحب نقدي
+                          ├── إيداع نقدي
+                          ├── سجل المعاملات → تفاصيل معاملة
+                          ├── QR التاجر (للتجار)
+                          ├── استلام دفعة (للتجار)
+                          └── الإعدادات → تسجيل خروج
 ```
 
----
+## التكامل مع السيرفر
 
-## 📄 الترخيص
+| شاشة التطبيق | API Endpoint |
+|---|---|
+| Login | `POST /api/v1/auth/login` |
+| Signup | `POST /api/v1/auth/signup` |
+| Home (رصيد) | `GET /api/v1/wallet/balance` |
+| تحويل | `POST /api/v1/wallet/transfer` |
+| حوالة خارجية | `POST /api/v1/wallet/transfer-external` |
+| سداد فواتير | `POST /api/v1/wallet/pay-bill` |
+| دفع QR | `POST /api/v1/wallet/qr-pay` |
+| سحب نقدي | `POST /api/v1/wallet/generate-cashout` |
+| إيداع | `POST /api/v1/wallet/cash-in` |
+| سجل المعاملات | `GET /api/v1/wallet/transactions` |
+| تفاصيل معاملة | `GET /api/v1/wallet/transactions/:id` |
+| خدمات الفواتير | `GET /api/v1/wallet/services` |
+| QR التاجر | `GET /api/v1/merchant/qr-info` |
+| معاملات التاجر | `GET /api/v1/merchant/transactions` |
 
-MIT License — استخدم حر مع الإشارة للمصدر.
+## التقنيات
 
----
-
-<div align="center">
-صُنع بـ ❤️ باستخدام Kotlin + Jetpack Compose
-</div>
+- **UI**: Jetpack Compose + Material 3
+- **Navigation**: Navigation Compose
+- **DI**: Hilt (Dagger)
+- **Network**: Retrofit 2 + OkHttp + Gson
+- **Session**: DataStore Preferences
+- **Architecture**: MVVM (ViewModel + Repository)

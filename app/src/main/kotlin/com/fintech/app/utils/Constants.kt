@@ -1,5 +1,7 @@
 package com.fintech.app.utils
 
 object Constants {
-    const val BASE_URL = "http://206.189.137.59:3001/api/v1/"
+    // BASE_URL is configured via BuildConfig in build.gradle.kts
+    // Debug:   http://10.0.2.2:3000/
+    // Release: set your production URL in build.gradle.kts
 }

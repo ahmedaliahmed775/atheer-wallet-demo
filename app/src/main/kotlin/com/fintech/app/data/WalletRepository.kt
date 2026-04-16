@@ -18,12 +18,13 @@ class WalletRepository @Inject constructor(
         if (response.responseCode != 0) throw Exception(response.responseMessage)
         val body = response.body ?: throw Exception(response.responseMessage ?: "فشل تسجيل الدخول")
         session.save(
-            token   = body.accessToken,
-            userId  = body.user.id,
-            name    = body.user.name,
-            phone   = body.user.phone,
-            role    = body.user.role,
-            balance = body.user.balance
+            token     = body.accessToken,
+            userId    = body.user.id,
+            name      = body.user.name,
+            phone     = body.user.phone,
+            role      = body.user.role,
+            balance   = body.user.balance,
+            posNumber = body.user.posNumber
         )
         body
     }
@@ -38,12 +39,13 @@ class WalletRepository @Inject constructor(
         if (response.responseCode != 0) throw Exception(response.responseMessage)
         val body = response.body ?: throw Exception(response.responseMessage ?: "فشل إنشاء الحساب")
         session.save(
-            token   = body.accessToken,
-            userId  = body.user.id,
-            name    = body.user.name,
-            phone   = body.user.phone,
-            role    = body.user.role,
-            balance = body.user.balance
+            token     = body.accessToken,
+            userId    = body.user.id,
+            name      = body.user.name,
+            phone     = body.user.phone,
+            role      = body.user.role,
+            balance   = body.user.balance,
+            posNumber = body.user.posNumber
         )
         body
     }
@@ -86,13 +88,6 @@ class WalletRepository @Inject constructor(
         body
     }
 
-    suspend fun generateVoucher(amount: Double): Result<VoucherBody> = runCatching {
-        val response = api.generateVoucher(GenerateVoucherRequest(amount))
-        if (response.responseCode != 0) throw Exception(response.responseMessage ?: "فشل إنشاء القسيمة")
-        val body = response.body ?: throw Exception(response.responseMessage ?: "فشل إنشاء القسيمة")
-        session.updateBalance(body.newBalance)
-        body
-    }
 
     suspend fun payBill(
         category: String,
@@ -108,7 +103,7 @@ class WalletRepository @Inject constructor(
     }
 
     suspend fun qrPay(
-        merchantPhone: String,
+        posNumber: String,
         amount: Double,
         note: String
     ): Result<QrPayBody> = runCatching {
@@ -161,16 +156,6 @@ class WalletRepository @Inject constructor(
 
     // ─── Merchant ─────────────────────────────────────────
 
-    suspend fun cashout(
-        agentWallet: String,
-        password: String,
-        accessToken: String,
-        voucherCode: String
-    ): Result<CashoutBody> = runCatching {
-        val response = api.cashout(CashoutRequest(agentWallet, password, accessToken, voucherCode))
-        if (response.responseCode != 0) throw Exception(response.responseMessage ?: "فشل عملية الدفع")
-        response.body ?: throw Exception(response.responseMessage ?: "فشل عملية الدفع")
-    }
 
     suspend fun getMerchantQrInfo(): Result<QrInfoBody> = runCatching {
         val response = api.getMerchantQrInfo()

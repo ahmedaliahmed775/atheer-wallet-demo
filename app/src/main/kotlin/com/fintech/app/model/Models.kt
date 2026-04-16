@@ -48,7 +48,7 @@ data class BalanceResponse(
 
 data class BalanceBody(
     val balance: Double,
-    val currency: String,
+    val currency: String? = null,
     val phone: String,
     val name: String,
     val role: String
@@ -149,7 +149,7 @@ data class QrPayBody(
     val refId: String,
     val amount: Double,
     val merchantName: String,
-    val posNumber: String,
+    val merchantPhone: String? = null,
     val newBalance: Double,
     val timestamp: String
 )
@@ -206,7 +206,7 @@ data class QrInfoResponse(
 
 data class QrInfoBody(
     val merchantName: String,
-    val posNumber: String,
+    val merchantPhone: String? = null,
     val merchantPosNumber: String? = null,
     val qrData: String
 )

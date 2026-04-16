@@ -28,15 +28,17 @@ class FinTechViewModel @Inject constructor(
                 session.phone,
                 session.role,
                 session.balance,
-                session.userId
+                session.userId,
+                session.posNumber
             ) { arr ->
-                val loggedIn = arr[0] as Boolean
-                val token    = arr[1] as? String ?: ""
-                val name     = arr[2] as? String ?: ""
-                val phone    = arr[3] as? String ?: ""
-                val role     = arr[4] as? String ?: "customer"
-                val balance  = arr[5] as? Double ?: 0.0
-                val userId   = arr[6] as? Int ?: 0
+                val loggedIn  = arr[0] as Boolean
+                val token     = arr[1] as? String ?: ""
+                val name      = arr[2] as? String ?: ""
+                val phone     = arr[3] as? String ?: ""
+                val role      = arr[4] as? String ?: "customer"
+                val balance   = arr[5] as? Double ?: 0.0
+                val userId    = arr[6] as? Int ?: 0
+                val posNumber = arr[7] as? String
                 AppUiState(
                     isLoggedIn = loggedIn,
                     token      = token,
@@ -44,7 +46,8 @@ class FinTechViewModel @Inject constructor(
                     userPhone  = phone,
                     userRole   = role,
                     balance    = balance,
-                    userId     = userId
+                    userId     = userId,
+                    posNumber  = posNumber
                 )
             }.collect { restored ->
                 _uiState.update { restored }
@@ -76,6 +79,7 @@ class FinTechViewModel @Inject constructor(
                             userName   = body.user.name,
                             userPhone  = body.user.phone,
                             userRole   = body.user.role,
+                            posNumber  = body.user.posNumber,
                             balance    = body.user.balance,
                             error      = null
                         )
@@ -110,6 +114,7 @@ class FinTechViewModel @Inject constructor(
                             userName   = body.user.name,
                             userPhone  = body.user.phone,
                             userRole   = body.user.role,
+                            posNumber  = body.user.posNumber,
                             balance    = body.user.balance,
                             error      = null
                         )
@@ -186,9 +191,6 @@ class FinTechViewModel @Inject constructor(
                 .onFailure { setError(it.message ?: "فشل إرسال الحوالة") }
         }
     }
-                .onFailure { setError(it.message ?: "فشل إنشاء القسيمة") }
-        }
-    }
 
     fun payBill(category: String, provider: String, accountNumber: String, amount: Double) {
         if (accountNumber.isBlank()) { setError("يرجى إدخال رقم الحساب"); return }
@@ -215,7 +217,7 @@ class FinTechViewModel @Inject constructor(
     }
 
     fun qrPay(posNumber: String, amount: Double, note: String = "") {
-        if (merchantPhone.isBlank()) { setError("يرجى إدخال رقم التاجر"); return }
+        if (posNumber.isBlank()) { setError("يرجى إدخال رقم نقطة البيع"); return }
         if (amount <= 0)             { setError("يرجى إدخال مبلغ صحيح");  return }
         if (amount > _uiState.value.balance) { setError("رصيدك غير كافٍ"); return }
 
@@ -327,9 +329,7 @@ class FinTechViewModel @Inject constructor(
     fun clearSuccess() = _uiState.update {
         it.copy(
             successMessage       = null,
-            lastVoucher          = null,
             lastTransfer         = null,
-            lastCashout          = null,
             lastBillPayment      = null,
             lastQrPay            = null,
             lastCashOut          = null,

@@ -125,11 +125,6 @@ fun AppNavigation(
                 onClearError   = { vm.clearError() },
                 onClearSuccess = { vm.clearSuccess() }
             )
-        },
-                onBack         = { navController.popBackStack() },
-                onClearError   = { vm.clearError() },
-                onClearSuccess = { vm.clearSuccess() }
-            )
         }
 
         composable(Screen.BillPayment.route) {

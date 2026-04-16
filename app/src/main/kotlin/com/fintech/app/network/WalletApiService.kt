@@ -22,8 +22,6 @@ interface WalletApiService {
     @POST("api/v1/wallet/transfer-external")
     suspend fun transferExternal(@Body request: ExternalTransferRequest): ExternalTransferResponse
 
-    @POST("api/v1/wallet/generate-voucher")
-    suspend fun generateVoucher(@Body request: GenerateVoucherRequest): VoucherResponse
 
     @POST("api/v1/wallet/pay-bill")
     suspend fun payBill(@Body request: BillPaymentRequest): BillPaymentResponse
@@ -53,8 +51,6 @@ interface WalletApiService {
     suspend fun getProfile(): BalanceResponse
 
     // ─── Merchant ─────────────────────────────────────────
-    @POST("api/v1/merchant/switch-charge")
-    suspend fun cashout(@Body request: CashoutRequest): CashoutResponse
 
     @GET("api/v1/merchant/transactions")
     suspend fun getMerchantTransactions(@Query("page") page: Int = 1): TransactionsResponse
