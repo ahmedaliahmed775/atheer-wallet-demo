@@ -28,6 +28,7 @@ import com.fintech.app.ui.theme.*
 fun HomeScreen(
     uiState: AppUiState,
     onRefresh: () -> Unit,
+    onNotifications: () -> Unit,
     onTransfer: () -> Unit,
     onQrPay: () -> Unit,
     onBillPayment: () -> Unit,
@@ -120,8 +121,13 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        IconButton(onRefresh) {
-                            Icon(Icons.Default.Refresh, null, tint = Color.White)
+                        Row {
+                            IconButton(onClick = onNotifications) {
+                                Icon(Icons.Default.Notifications, null, tint = Color.White)
+                            }
+                            IconButton(onClick = onRefresh) {
+                                Icon(Icons.Default.Refresh, null, tint = Color.White)
+                            }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
@@ -293,6 +299,7 @@ fun HomeScreenPreview() {
         HomeScreen(
             uiState = com.fintech.app.model.AppUiState(balance = 150000.0),
             onRefresh = {},
+            onNotifications = {},
             onTransfer = {},
             onQrPay = {},
             onBillPayment = {},

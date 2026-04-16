@@ -285,6 +285,101 @@ data class TransactionDetailBody(
     val metadata: Map<String, Any>? = null,
     val timestamp: String
 )
+// ─── Jawali Gateway Models (مطابقة ١٠٠٪ لبوابة جوالي) ────
+
+// ── بنية مشتركة: signonDetail ──
+
+data class SignonDetail(
+    val orgID: String,
+    val userID: String,
+    val externalUser: String = ""
+)
+
+// ── POST /paygate/login ──
+
+data class JawaliLoginRequest(
+    val username: String,
+    val password: String
+)
+
+data class JawaliLoginResponse(
+    val success: Boolean,
+    val accessToken: String? = null,
+    val expiresIn: Int? = null,
+    val tokenType: String? = null,
+    val error: String? = null,
+    val message: String? = null
+)
+
+// ── POST /paygate/PAYWA ──
+
+data class JawaliWalletAuthRequest(
+    val header: JawaliWalletAuthHeader,
+    val body: JawaliWalletAuthBody
+)
+
+data class JawaliWalletAuthHeader(
+    val signonDetail: SignonDetail,
+    val accessToken: String? = null
+)
+
+data class JawaliWalletAuthBody(
+    val wallet: String,
+    val walletPassword: String
+)
+
+data class JawaliWalletAuthResponse(
+    val success: Boolean,
+    val walletToken: String? = null,
+    val expiresIn: Int? = null,
+    val error: String? = null,
+    val message: String? = null
+)
+
+// ── POST /paygate/PAYAG (Inquiry + Cashout) ──
+
+data class JawaliPayagRequest(
+    val header: JawaliPayagHeader,
+    val body: JawaliPayagBody
+)
+
+data class JawaliPayagHeader(
+    val signonDetail: SignonDetail,
+    val accessToken: String,
+    val walletToken: String
+)
+
+data class JawaliPayagBody(
+    val voucher: String,
+    val receiverMobile: String,
+    val purpose: String = ""
+)
+
+data class JawaliPayagResponse(
+    val success: Boolean,
+    val data: JawaliPayagData? = null,
+    val error: String? = null,
+    val message: String? = null
+)
+
+data class JawaliPayagData(
+    val amount: Double? = null,
+    val currency: String? = null,
+    val state: String? = null,
+    val transactionRef: String? = null,
+    val inquiryRef: String? = null
+)
+
+// ── FCM ──
+
+data class FcmTokenRequest(
+    val fcmToken: String
+)
+
+data class GenericResponse(
+    @SerializedName("ResponseCode") val responseCode: Int,
+    @SerializedName("ResponseMessage") val responseMessage: String?
+)
 
 // ─── App UI State ─────────────────────────────────────────
 
@@ -308,5 +403,9 @@ data class AppUiState(
     val lastCashOut: CashOutBody? = null,
     val lastCashIn: CashInBody? = null,
     val lastExternalTransfer: ExternalTransferBody? = null,
-    val transactionDetail: TransactionDetailBody? = null
+    val transactionDetail: TransactionDetailBody? = null,
+    // Jawali gateway state
+    val jawaliInquiryResult: JawaliPayagData? = null,
+    val jawaliCashoutResult: JawaliPayagData? = null
 )
+

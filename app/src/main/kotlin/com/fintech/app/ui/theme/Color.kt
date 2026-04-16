@@ -8,7 +8,8 @@ val PrimaryDk = Color(0xFF0F6E56)
 val Merchant  = Color(0xFF534AB7)
 val BgCard    = Color(0xFFF8F7F4)
 val TextMuted = Color(0xFF888780)
-
+val TextMain = Color(0xFF1E1E1E) // لون أسود داكن للنصوص
+val BgMain = Color(0xFFF5F5F5)   // لون رمادي فاتح للخلفيات
 // ─── Original Colors ───────────────────────────────────────────────────────────
 val RoyalBlue    = Color(0xFF1E40AF)
 val DarkBlue     = Color(0xFF1E3A8A)

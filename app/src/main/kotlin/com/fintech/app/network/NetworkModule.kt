@@ -24,16 +24,19 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(sessionManager: SessionManager): OkHttpClient {
 
+        // ── Interceptor لـ API أثير (wallet/auth) — يضيف Bearer token ──
         val authInterceptor = Interceptor { chain ->
             val token = runBlocking { sessionManager.token.first() }
-            val request = if (!token.isNullOrBlank()) {
-                chain.request().newBuilder()
-                    .addHeader("Authorization", "Bearer $token")
-                    .build()
-            } else {
-                chain.request()
+
+            val requestBuilder = chain.request().newBuilder()
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "application/json")
+
+            if (!token.isNullOrBlank()) {
+                requestBuilder.addHeader("Authorization", "Bearer $token")
             }
-            chain.proceed(request)
+
+            chain.proceed(requestBuilder.build())
         }
 
         val logging = HttpLoggingInterceptor().apply {
@@ -65,4 +68,13 @@ object NetworkModule {
     @Singleton
     fun provideApiService(retrofit: Retrofit): WalletApiService =
         retrofit.create(WalletApiService::class.java)
+
+    // ─── Jawali Gateway API ──────────────────────────────────
+    // يستخدم نفس الـ Retrofit (نفس الـ BASE_URL + OkHttpClient)
+    // التوكنات تُدار عبر JawaliTokenManager (في body وليس headers)
+
+    @Provides
+    @Singleton
+    fun provideJawaliGatewayApi(retrofit: Retrofit): JawaliGatewayApi =
+        retrofit.create(JawaliGatewayApi::class.java)
 }

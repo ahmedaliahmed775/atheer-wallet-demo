@@ -57,4 +57,9 @@ interface WalletApiService {
 
     @GET("api/v1/merchant/qr-info")
     suspend fun getMerchantQrInfo(): QrInfoResponse
+
+    // ─── FCM Token (Atheer server endpoint) ──────────────────
+    @POST("api/v1/wallet/fcm-token")
+    suspend fun updateFcmToken(@Body request: FcmTokenRequest): GenericResponse
 }
+

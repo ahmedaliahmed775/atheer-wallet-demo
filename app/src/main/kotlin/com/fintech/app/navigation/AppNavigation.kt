@@ -26,6 +26,7 @@ sealed class Screen(val route: String) {
     object ReceivePayment    : Screen("receive_payment")
     object History           : Screen("history")
     object Settings          : Screen("settings")
+    object Notifications     : Screen("notifications")
     object TransactionDetail : Screen("transaction_detail/{txnId}") {
         fun withId(id: String) = "transaction_detail/$id"
     }
@@ -93,6 +94,7 @@ fun AppNavigation(
             HomeScreen(
                 uiState            = uiState,
                 onRefresh          = { vm.refreshBalance(); vm.loadTransactions() },
+                onNotifications    = { navController.navigate(Screen.Notifications.route) },
                 onTransfer         = { navController.navigate(Screen.Transfer.route) },
                 onQrPay            = { navController.navigate(Screen.QrPay.route) },
                 onBillPayment      = { navController.navigate(Screen.BillPayment.route) },
@@ -216,6 +218,12 @@ fun AppNavigation(
                     }
                 },
                 onBack   = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Notifications.route) {
+            NotificationsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

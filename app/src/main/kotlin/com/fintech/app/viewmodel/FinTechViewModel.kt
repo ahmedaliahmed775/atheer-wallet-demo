@@ -323,6 +323,103 @@ class FinTechViewModel @Inject constructor(
 
     // ─── Merchant ─────────────────────────────────────────
 
+    // ─── Jawali Gateway (مطابق لبوابة جوالي) ─────────────
+    // التدفق: login → walletAuth → inquiry(PENDING) → cashout(SUCCESS)
+
+    /**
+     * استعلام جوالي: login → walletAuth → PAYAG(inquiry)
+     * مطابق لـ Jawali::ecommerceInquiry()
+     */
+    fun jawaliInquiry(voucher: String, receiverMobile: String, purpose: String) {
+        if (voucher.isBlank() || receiverMobile.isBlank()) {
+            setError("يرجى إدخال رقم القسيمة ورقم المستلم"); return
+        }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.jawaliInquiry(voucher.trim(), receiverMobile.trim(), purpose)
+                .onSuccess { data ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading           = false,
+                            jawaliInquiryResult = data,
+                            successMessage      = "تم الاستعلام — حالة: ${data.state} — المرجع: ${data.transactionRef}",
+                            error               = null
+                        )
+                    }
+                }
+                .onFailure { setError(it.message ?: "فشل الاستعلام") }
+        }
+    }
+
+    /**
+     * صرف جوالي: PAYAG(cashout) — يجب أن يسبقه inquiry ناجح
+     * مطابق لـ Jawali::ecommerceCashout()
+     */
+    fun jawaliCashout(voucher: String, receiverMobile: String, purpose: String) {
+        viewModelScope.launch {
+            setLoading(true)
+            repo.jawaliCashout(voucher, receiverMobile, purpose)
+                .onSuccess { data ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading            = false,
+                            jawaliCashoutResult  = data,
+                            jawaliInquiryResult  = null,
+                            successMessage       = "تم الصرف بنجاح ✅ — ${data.amount?.toLong()} ${data.currency}",
+                            error                = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل عملية الصرف") }
+        }
+    }
+
+    /**
+     * التدفق الكامل: login → walletAuth → inquiry → verify → cashout
+     * مطابق لـ processPayment() في وثائق جوالي
+     */
+    fun jawaliProcessPayment(
+        voucher: String,
+        receiverMobile: String,
+        purpose: String,
+        expectedAmount: Double? = null,
+        expectedCurrency: String? = null
+    ) {
+        if (voucher.isBlank() || receiverMobile.isBlank()) {
+            setError("يرجى إدخال رقم القسيمة ورقم المستلم"); return
+        }
+
+        viewModelScope.launch {
+            setLoading(true)
+            repo.jawaliProcessPayment(
+                voucher.trim(), receiverMobile.trim(), purpose,
+                expectedAmount, expectedCurrency
+            )
+                .onSuccess { data ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading           = false,
+                            jawaliCashoutResult = data,
+                            successMessage      = "تم الدفع عبر جوالي ✅ — ${data.amount?.toLong()} ${data.currency}",
+                            error               = null
+                        )
+                    }
+                    loadTransactions()
+                }
+                .onFailure { setError(it.message ?: "فشل الدفع عبر جوالي") }
+        }
+    }
+
+    /** تحديث توكن FCM */
+    fun updateFcmToken(token: String) {
+        viewModelScope.launch {
+            repo.updateFcmToken(token)
+                .onFailure { /* silent — non-critical */ }
+        }
+    }
+
     // ─── UI Helpers ───────────────────────────────────────
 
     fun clearError()   = _uiState.update { it.copy(error = null) }
@@ -335,10 +432,14 @@ class FinTechViewModel @Inject constructor(
             lastCashOut          = null,
             lastCashIn           = null,
             lastExternalTransfer = null,
-            transactionDetail    = null
+            transactionDetail    = null,
+            jawaliInquiryResult  = null,
+            jawaliCashoutResult  = null
         )
     }
 
     private fun setLoading(v: Boolean) = _uiState.update { it.copy(isLoading = v, error = null) }
     private fun setError(msg: String)  = _uiState.update { it.copy(isLoading = false, error = msg) }
 }
+
+

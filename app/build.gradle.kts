@@ -5,7 +5,6 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
 }
-
 android {
     namespace = "com.fintech.app"
     compileSdk = 35
@@ -17,20 +16,25 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "BASE_URL_DEBUG",   "\"http://10.0.2.2:3000/\"")
-        buildConfigField("String", "BASE_URL_RELEASE", "\"https://your-app.ondigitalocean.app/\"")
+        // التعديل هنا (روابط Render)
+        buildConfigField("String", "BASE_URL_DEBUG",   "\"https://atheer-wallet-provider.onrender.com\"")
+        buildConfigField("String", "BASE_URL_RELEASE", "\"https://atheer-wallet-provider.onrender.com\"")
     }
 
     buildTypes {
         debug {
-            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/\"")
+            // التعديل هنا لنسخة التطوير والتجربة
+            buildConfigField("String", "BASE_URL", "\"https://atheer-wallet-provider.onrender.com\"")
         }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            buildConfigField("String", "BASE_URL", "\"https://your-app.ondigitalocean.app/\"")
+            // التعديل هنا لنسخة الإنتاج النهائية
+            buildConfigField("String", "BASE_URL", "\"https://atheer-wallet-provider.onrender.com\"")
         }
     }
+
+
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
