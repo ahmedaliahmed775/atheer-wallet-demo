@@ -285,88 +285,115 @@ data class TransactionDetailBody(
     val metadata: Map<String, Any>? = null,
     val timestamp: String
 )
-// ─── Jawali Gateway Models (مطابقة ١٠٠٪ لبوابة جوالي) ────
+// ─── Jawali Gateway Models (مطابقة ١٠٠٪ للكود المصدري PHP) ──
+// مرجع: https://github.com/Alsharie/jawali-payment
 
-// ── بنية مشتركة: signonDetail ──
+// ═══ POST /oauth/token — OAuth2 Login ═══════════════════════
+// Content-Type: application/x-www-form-urlencoded (form-encoded)
 
-data class SignonDetail(
-    val orgID: String,
-    val userID: String,
-    val externalUser: String = ""
+// Login لا يحتاج data class للطلب — يُرسل كـ @FormUrlEncoded
+
+data class JawaliLoginResponse(
+    @SerializedName("access_token")  val accessToken: String? = null,
+    @SerializedName("token_type")    val tokenType: String? = null,
+    @SerializedName("refresh_token") val refreshToken: String? = null,
+    @SerializedName("expires_in")    val expiresIn: Int? = null,
+    val scope: String? = null,
+    // حقول الخطأ (OAuth2 error response)
+    val error: String? = null,
+    @SerializedName("error_description") val errorDescription: String? = null
+) {
+    fun isSuccess(): Boolean = accessToken != null
+}
+
+// ═══ POST /v1/ws/callWS — Structured Request ════════════════
+// مطابق لـ buildStructuredRequestPayload() في JawaliService.php
+
+// ── Header Components ──
+
+data class JawaliServiceDetail(
+    val corrID: String,          // UUID
+    val domainName: String,      // "WalletDomain" أو "MerchantDomain"
+    val serviceName: String      // "PAYWA.WALLETAUTHENTICATION" / "PAYAG.ECOMMERCEINQUIRY" / "PAYAG.ECOMMCASHOUT"
 )
 
-// ── POST /paygate/login ──
+data class JawaliSignonDetail(
+    val clientID: String = "WeCash",
+    val orgID: String,
+    val userID: String,
+    val externalUser: String? = null
+)
 
-data class JawaliLoginRequest(
-    val username: String,
+data class JawaliMessageContext(
+    val clientDate: String,      // format: "YYYYMMDDHHmmss"
+    val bodyType: String = "Clear"
+)
+
+data class JawaliRequestHeader(
+    val serviceDetail: JawaliServiceDetail,
+    val signonDetail: JawaliSignonDetail,
+    val messageContext: JawaliMessageContext
+)
+
+// ── Full Structured Request ──
+
+data class JawaliStructuredRequest(
+    val header: JawaliRequestHeader,
+    val body: Map<String, String>
+)
+
+// ── PAYWA Body — مطابق لـ walletAuthentication() ──
+
+data class JawaliWalletAuthBody(
+    val identifier: String,
     val password: String
 )
 
-data class JawaliLoginResponse(
-    val success: Boolean,
-    val accessToken: String? = null,
-    val expiresIn: Int? = null,
-    val tokenType: String? = null,
-    val error: String? = null,
-    val message: String? = null
-)
-
-// ── POST /paygate/PAYWA ──
-
-data class JawaliWalletAuthRequest(
-    val header: JawaliWalletAuthHeader,
-    val body: JawaliWalletAuthBody
-)
-
-data class JawaliWalletAuthHeader(
-    val signonDetail: SignonDetail,
-    val accessToken: String? = null
-)
-
-data class JawaliWalletAuthBody(
-    val wallet: String,
-    val walletPassword: String
-)
-
-data class JawaliWalletAuthResponse(
-    val success: Boolean,
-    val walletToken: String? = null,
-    val expiresIn: Int? = null,
-    val error: String? = null,
-    val message: String? = null
-)
-
-// ── POST /paygate/PAYAG (Inquiry + Cashout) ──
-
-data class JawaliPayagRequest(
-    val header: JawaliPayagHeader,
-    val body: JawaliPayagBody
-)
-
-data class JawaliPayagHeader(
-    val signonDetail: SignonDetail,
-    val accessToken: String,
-    val walletToken: String
-)
+// ── PAYAG Body — مطابق لـ ecommerceInquiry()/ecommerceCashout() ──
 
 data class JawaliPayagBody(
+    val agentWallet: String,
     val voucher: String,
     val receiverMobile: String,
+    val password: String,
+    val accessToken: String,     // هذا walletToken — يُسمّى accessToken في body
+    val refId: String,
     val purpose: String = ""
 )
 
-data class JawaliPayagResponse(
-    val success: Boolean,
-    val data: JawaliPayagData? = null,
-    val error: String? = null,
-    val message: String? = null
+// ═══ Structured Response — مطابق لـ JawaliResponse.php ══════
+// { "responseBody": { ... }, "responseStatus": { "systemStatus": "0", ... } }
+
+data class JawaliResponseStatus(
+    val systemStatus: String? = null,
+    val systemStatusDesc: String? = null,
+    val systemStatusDescNative: String? = null,
+    val errorCode: String? = null
 )
 
-data class JawaliPayagData(
-    val amount: Double? = null,
-    val currency: String? = null,
+data class JawaliStructuredResponse(
+    val responseBody: JawaliResponseBody? = null,
+    val responseStatus: JawaliResponseStatus? = null
+) {
+    fun isSuccess(): Boolean = responseStatus?.systemStatus == "0"
+    fun getErrorMessage(): String? = responseStatus?.systemStatusDesc
+}
+
+// ── responseBody — حقول مطابقة لـ JawaliEcommerceInquiryResponse.php ──
+
+data class JawaliResponseBody(
+    // Wallet Auth
+    val accessToken: String? = null,
+    val expiresIn: Int? = null,
+    // Inquiry / Cashout — مطابق لأسماء الحقول في PHP
+    val txnamount: String? = null,
+    val txncurrency: String? = null,
     val state: String? = null,
-    val transactionRef: String? = null,
+    val issuerTrxRef: String? = null,
+    val trxDate: String? = null,
+    val voucher: String? = null,
+    val receiverMobile: String? = null,
+    val purpose: String? = null,
     val inquiryRef: String? = null
 )
 
@@ -405,7 +432,8 @@ data class AppUiState(
     val lastExternalTransfer: ExternalTransferBody? = null,
     val transactionDetail: TransactionDetailBody? = null,
     // Jawali gateway state
-    val jawaliInquiryResult: JawaliPayagData? = null,
-    val jawaliCashoutResult: JawaliPayagData? = null
+    val jawaliInquiryResult: JawaliResponseBody? = null,
+    val jawaliCashoutResult: JawaliResponseBody? = null
 )
+
 

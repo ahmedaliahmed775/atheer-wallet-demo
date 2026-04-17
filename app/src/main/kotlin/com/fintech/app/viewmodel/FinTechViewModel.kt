@@ -323,11 +323,11 @@ class FinTechViewModel @Inject constructor(
 
     // ─── Merchant ─────────────────────────────────────────
 
-    // ─── Jawali Gateway (مطابق لبوابة جوالي) ─────────────
+    // ─── Jawali Gateway (مطابق لـ JawaliService.php) ────────
     // التدفق: login → walletAuth → inquiry(PENDING) → cashout(SUCCESS)
 
     /**
-     * استعلام جوالي: login → walletAuth → PAYAG(inquiry)
+     * استعلام جوالي: login → walletAuth → PAYAG.ECOMMERCEINQUIRY
      * مطابق لـ Jawali::ecommerceInquiry()
      */
     fun jawaliInquiry(voucher: String, receiverMobile: String, purpose: String) {
@@ -343,7 +343,7 @@ class FinTechViewModel @Inject constructor(
                         it.copy(
                             isLoading           = false,
                             jawaliInquiryResult = data,
-                            successMessage      = "تم الاستعلام — حالة: ${data.state} — المرجع: ${data.transactionRef}",
+                            successMessage      = "تم الاستعلام — حالة: ${data.state} — المرجع: ${data.issuerTrxRef}",
                             error               = null
                         )
                     }
@@ -353,7 +353,7 @@ class FinTechViewModel @Inject constructor(
     }
 
     /**
-     * صرف جوالي: PAYAG(cashout) — يجب أن يسبقه inquiry ناجح
+     * صرف جوالي: PAYAG.ECOMMCASHOUT — يجب أن يسبقه inquiry ناجح
      * مطابق لـ Jawali::ecommerceCashout()
      */
     fun jawaliCashout(voucher: String, receiverMobile: String, purpose: String) {
@@ -366,7 +366,7 @@ class FinTechViewModel @Inject constructor(
                             isLoading            = false,
                             jawaliCashoutResult  = data,
                             jawaliInquiryResult  = null,
-                            successMessage       = "تم الصرف بنجاح ✅ — ${data.amount?.toLong()} ${data.currency}",
+                            successMessage       = "تم الصرف بنجاح ✅ — ${data.txnamount} ${data.txncurrency}",
                             error                = null
                         )
                     }
@@ -384,7 +384,7 @@ class FinTechViewModel @Inject constructor(
         voucher: String,
         receiverMobile: String,
         purpose: String,
-        expectedAmount: Double? = null,
+        expectedAmount: String? = null,
         expectedCurrency: String? = null
     ) {
         if (voucher.isBlank() || receiverMobile.isBlank()) {
@@ -402,7 +402,7 @@ class FinTechViewModel @Inject constructor(
                         it.copy(
                             isLoading           = false,
                             jawaliCashoutResult = data,
-                            successMessage      = "تم الدفع عبر جوالي ✅ — ${data.amount?.toLong()} ${data.currency}",
+                            successMessage      = "تم الدفع عبر جوالي ✅ — ${data.txnamount} ${data.txncurrency}",
                             error               = null
                         )
                     }
@@ -441,5 +441,6 @@ class FinTechViewModel @Inject constructor(
     private fun setLoading(v: Boolean) = _uiState.update { it.copy(isLoading = v, error = null) }
     private fun setError(msg: String)  = _uiState.update { it.copy(isLoading = false, error = msg) }
 }
+
 
 

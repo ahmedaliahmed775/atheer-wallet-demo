@@ -2,260 +2,271 @@ package com.fintech.app.data
 
 import com.fintech.app.model.*
 import com.fintech.app.network.JawaliGatewayApi
+import java.text.SimpleDateFormat
+import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * مدير توكنات جوالي — مطابق لـ JawaliService في حزمة جوالي الرسمية
+ * مدير توكنات جوالي — مطابق ١٠٠٪ لـ JawaliService.php + TokenManager.php
+ * مرجع: https://github.com/Alsharie/jawali-payment
  *
  * يدير:
- * - accessToken (من loginToSystem)
- * - walletToken (من walletAuthentication)
- * - إعادة المحاولة التلقائية عند انتهاء صلاحية التوكنات
- * - التدفق الرباعي الكامل: login → walletAuth → inquiry → cashout
- *
- * بيانات الوكيل (Merchant) تُقرأ من الـ config (مطابق لـ config/jawali.php)
+ * - accessToken (من loginToSystem — OAuth2)
+ * - walletToken (من walletAuthentication — PAYWA.WALLETAUTHENTICATION)
+ * - بناء الـ Structured Payload (header + body) — مطابق لـ buildStructuredRequestPayload()
+ * - إعادة المحاولة — مطابق لـ sendStructuredRequest() retry logic
+ * - التدفق الرباعي:  login → walletAuth → inquiry → cashout
  */
 @Singleton
 class JawaliTokenManager @Inject constructor(
     private val api: JawaliGatewayApi
 ) {
-    // ─── توكنات ─────────────────────────────────────────────
+    // ─── Tokens — مطابق لـ TokenManager.php ──────────────────
     private var accessToken: String? = null
     private var walletToken: String? = null
     private var accessTokenExpiresAt: Long = 0
     private var walletTokenExpiresAt: Long = 0
 
-    // ─── بيانات الوكيل (مطابقة لـ config/jawali.php) ────────
-    // في الإنتاج: تُقرأ من BuildConfig أو Remote Config
+    // ─── بيانات الوكيل — مطابق لـ config/jawali.php ──────────
     private val merchantUsername = "atheer_merchant"
     private val merchantPassword = "atheer_pass_123"
-    private val merchantWallet = "777000001"
-    private val merchantWalletPassword = "wallet_pass_123"
-    private val merchantOrgId = "atheer-org-001"
-    private val merchantUserId = "atheer.api.user"
-    private val merchantExternalUser = "atheer_ext_1"
+    private val walletIdentifier = "777000001"       // auth.wallet_identifier
+    private val walletPassword = "wallet_pass_123"   // auth.wallet_password
+    private val orgId = "atheer-org-001"              // auth.org_id
+    private val userId = "atheer.api.user"            // auth.user_id
+    private val externalUser = "atheer_ext_1"         // auth.external_user
 
-    // ─── Retry settings (مطابق لـ retry.max_attempts) ───────
-    private val maxRetryAttempts = 2
-    private val retryStatusCodes = listOf(400, 401)
+    // ─── Constants — مطابق لـ JawaliService.php constants ────
+    private companion object {
+        const val CLIENT_ID = "WeCash"                    // COMMON_SIGNON_CLIENT_ID
+        const val BODY_TYPE = "Clear"                     // COMMON_BODY_TYPE
+        const val WALLET_AUTH_SERVICE = "PAYWA.WALLETAUTHENTICATION"
+        const val WALLET_AUTH_DOMAIN = "WalletDomain"
+        const val INQUIRY_SERVICE = "PAYAG.ECOMMERCEINQUIRY"
+        const val INQUIRY_DOMAIN = "MerchantDomain"
+        const val CASHOUT_SERVICE = "PAYAG.ECOMMCASHOUT"
+        const val CASHOUT_DOMAIN = "MerchantDomain"
+        // retry — مطابق لـ config retry.max_attempts
+        const val MAX_RETRY = 2
+    }
 
-    // ─── SignonDetail ────────────────────────────────────────
+    // ─── Token Checks — مطابق لـ TokenManager::hasAuthToken() ──
 
-    private fun buildSignonDetail(): SignonDetail = SignonDetail(
-        orgID = merchantOrgId,
-        userID = merchantUserId,
-        externalUser = merchantExternalUser
-    )
-
-    // ─── Token Checks ───────────────────────────────────────
-
-    private fun isAccessTokenValid(): Boolean =
+    private fun hasAuthToken(): Boolean =
         accessToken != null && System.currentTimeMillis() < accessTokenExpiresAt
 
-    private fun isWalletTokenValid(): Boolean =
+    private fun hasWalletToken(): Boolean =
         walletToken != null && System.currentTimeMillis() < walletTokenExpiresAt
 
+    // ─── Payload Builders — مطابق لـ buildStructuredRequestPayload() ──
+
+    private fun buildSignonDetail(): JawaliSignonDetail = JawaliSignonDetail(
+        clientID = CLIENT_ID,
+        orgID = orgId,
+        userID = userId,
+        externalUser = externalUser
+    )
+
+    private fun buildHeader(serviceName: String, domainName: String): JawaliRequestHeader {
+        val dateFormat = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+        return JawaliRequestHeader(
+            serviceDetail = JawaliServiceDetail(
+                corrID = UUID.randomUUID().toString(),
+                domainName = domainName,
+                serviceName = serviceName
+            ),
+            signonDetail = buildSignonDetail(),
+            messageContext = JawaliMessageContext(
+                clientDate = dateFormat.format(Date()),
+                bodyType = BODY_TYPE
+            )
+        )
+    }
+
+    private fun generateRefId(): String = System.currentTimeMillis().toString()
+
+    private fun bearerHeader(): String = "Bearer ${accessToken ?: ""}"
+
     // ═══════════════════════════════════════════════════════════
-    // ① loginToSystem — مطابق لـ Jawali::loginToSystem()
+    // ① loginToSystem — مطابق لـ JawaliService::loginToSystem()
+    // Http::asForm()->post(baseUrl . '/oauth/token', payload)
     // ═══════════════════════════════════════════════════════════
 
     suspend fun loginToSystem(): Result<String> = runCatching {
-        val response = api.login(
-            JawaliLoginRequest(
-                username = merchantUsername,
-                password = merchantPassword
-            )
+        val response = api.loginToSystem(
+            username = merchantUsername,
+            password = merchantPassword
         )
 
-        if (!response.success || response.accessToken == null) {
-            throw Exception(response.message ?: "فشل تسجيل الدخول للنظام")
+        if (!response.isSuccess()) {
+            throw Exception(response.errorDescription ?: response.error ?: "فشل تسجيل الدخول")
         }
 
         accessToken = response.accessToken
         val expiresIn = response.expiresIn ?: 3600
         accessTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
 
-        response.accessToken
+        response.accessToken!!
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ② walletAuthentication — مطابق لـ Jawali::walletAuthentication()
+    // ② walletAuthentication — مطابق لـ JawaliService::walletAuthentication()
+    // Http::asJson()->withToken(accessToken)->post(baseUrl . '/v1/ws/callWS', payload)
     // ═══════════════════════════════════════════════════════════
 
     suspend fun walletAuthentication(): Result<String> = runCatching {
-        // التأكد من وجود accessToken
-        if (!isAccessTokenValid()) {
-            loginToSystem().getOrThrow()
-        }
+        if (!hasAuthToken()) loginToSystem().getOrThrow()
 
-        val response = api.walletAuthentication(
-            JawaliWalletAuthRequest(
-                header = JawaliWalletAuthHeader(
-                    signonDetail = buildSignonDetail(),
-                    accessToken = accessToken
-                ),
-                body = JawaliWalletAuthBody(
-                    wallet = merchantWallet,
-                    walletPassword = merchantWalletPassword
-                )
+        val request = JawaliStructuredRequest(
+            header = buildHeader(WALLET_AUTH_SERVICE, WALLET_AUTH_DOMAIN),
+            body = mapOf(
+                "identifier" to walletIdentifier,
+                "password" to walletPassword
             )
         )
 
-        if (!response.success || response.walletToken == null) {
-            throw Exception(response.message ?: "فشل مصادقة المحفظة")
+        val response = api.callWS(bearerHeader(), request)
+
+        if (!response.isSuccess()) {
+            throw Exception(response.getErrorMessage() ?: "فشل مصادقة المحفظة")
         }
 
-        walletToken = response.walletToken
-        val expiresIn = response.expiresIn ?: 1800
+        val token = response.responseBody?.accessToken
+            ?: throw Exception("لم يُرجع walletToken")
+
+        walletToken = token
+        val expiresIn = response.responseBody.expiresIn ?: 1800
         walletTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
 
-        response.walletToken
+        token
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ③ ecommerceInquiry — مطابق لـ Jawali::ecommerceInquiry()
+    // ③ ecommerceInquiry — مطابق لـ JawaliService::ecommerceInquiry()
     // ═══════════════════════════════════════════════════════════
 
     suspend fun ecommerceInquiry(
         voucher: String,
         receiverMobile: String,
         purpose: String
-    ): Result<JawaliPayagData> = executeWithRetry { attempt ->
-        val response = api.payag(
-            JawaliPayagRequest(
-                header = JawaliPayagHeader(
-                    signonDetail = buildSignonDetail(),
-                    accessToken = accessToken ?: throw Exception("لا يوجد accessToken"),
-                    walletToken = walletToken ?: throw Exception("لا يوجد walletToken")
-                ),
-                body = JawaliPayagBody(
-                    voucher = voucher,
-                    receiverMobile = receiverMobile,
-                    purpose = purpose
-                )
+    ): Result<JawaliResponseBody> = executeWithRetry(INQUIRY_SERVICE, INQUIRY_DOMAIN) {
+        val request = JawaliStructuredRequest(
+            header = buildHeader(INQUIRY_SERVICE, INQUIRY_DOMAIN),
+            body = mapOf(
+                "agentWallet" to walletIdentifier,
+                "voucher" to voucher,
+                "receiverMobile" to receiverMobile,
+                "password" to walletPassword,
+                "accessToken" to (walletToken ?: ""),
+                "refId" to generateRefId(),
+                "purpose" to purpose
             )
         )
 
-        if (!response.success || response.data == null) {
+        val response = api.callWS(bearerHeader(), request)
+
+        if (!response.isSuccess()) {
             throw JawaliApiException(
-                message = response.message ?: "فشل الاستعلام",
-                error = response.error,
-                isRetryable = response.error in listOf("ACCESS_TOKEN_EXPIRED", "WALLET_TOKEN_EXPIRED")
+                message = response.getErrorMessage() ?: "فشل الاستعلام",
+                error = response.responseStatus?.errorCode,
+                isRetryable = isTokenError(response)
             )
         }
 
-        if (response.data.state != "PENDING") {
-            throw Exception("حالة غير متوقعة: ${response.data.state}")
-        }
-
-        response.data
+        response.responseBody ?: throw Exception("responseBody is null")
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ④ ecommerceCashout — مطابق لـ Jawali::ecommerceCashout()
+    // ④ ecommerceCashout — مطابق لـ JawaliService::ecommerceCashout()
     // ═══════════════════════════════════════════════════════════
 
     suspend fun ecommerceCashout(
         voucher: String,
         receiverMobile: String,
         purpose: String
-    ): Result<JawaliPayagData> = executeWithRetry { attempt ->
-        val response = api.payag(
-            JawaliPayagRequest(
-                header = JawaliPayagHeader(
-                    signonDetail = buildSignonDetail(),
-                    accessToken = accessToken ?: throw Exception("لا يوجد accessToken"),
-                    walletToken = walletToken ?: throw Exception("لا يوجد walletToken")
-                ),
-                body = JawaliPayagBody(
-                    voucher = voucher,
-                    receiverMobile = receiverMobile,
-                    purpose = purpose
-                )
+    ): Result<JawaliResponseBody> = executeWithRetry(CASHOUT_SERVICE, CASHOUT_DOMAIN) {
+        val request = JawaliStructuredRequest(
+            header = buildHeader(CASHOUT_SERVICE, CASHOUT_DOMAIN),
+            body = mapOf(
+                "agentWallet" to walletIdentifier,
+                "voucher" to voucher,
+                "receiverMobile" to receiverMobile,
+                "password" to walletPassword,
+                "accessToken" to (walletToken ?: ""),
+                "refId" to generateRefId(),
+                "purpose" to purpose
             )
         )
 
-        if (!response.success || response.data == null) {
+        val response = api.callWS(bearerHeader(), request)
+
+        if (!response.isSuccess()) {
             throw JawaliApiException(
-                message = response.message ?: "فشل الصرف",
-                error = response.error,
-                isRetryable = response.error in listOf("ACCESS_TOKEN_EXPIRED", "WALLET_TOKEN_EXPIRED")
+                message = response.getErrorMessage() ?: "فشل الصرف",
+                error = response.responseStatus?.errorCode,
+                isRetryable = isTokenError(response)
             )
         }
 
-        response.data
+        response.responseBody ?: throw Exception("responseBody is null")
     }
 
     // ═══════════════════════════════════════════════════════════
-    // التدفق الكامل — مطابق لـ processPayment() في الوثائق
+    // processFullPayment — مطابق لـ processPayment() في الوثائق
     // ═══════════════════════════════════════════════════════════
-    //
-    //  login → walletAuth → inquiry(PENDING) → cashout(SUCCESS)
 
     suspend fun processFullPayment(
         voucher: String,
         receiverMobile: String,
         purpose: String,
-        expectedAmount: Double? = null,
+        expectedAmount: String? = null,
         expectedCurrency: String? = null
-    ): Result<JawaliPayagData> = runCatching {
-
-        // ① تسجيل الدخول
+    ): Result<JawaliResponseBody> = runCatching {
+        // ① login
         loginToSystem().getOrThrow()
-
-        // ② مصادقة المحفظة
+        // ② walletAuth
         walletAuthentication().getOrThrow()
-
-        // ③ استعلام
+        // ③ inquiry
         val inquiryData = ecommerceInquiry(voucher, receiverMobile, purpose).getOrThrow()
 
-        // ④ التحقق من الحالة والمبلغ والعملة (مطابق للوثائق)
         check(inquiryData.state == "PENDING") {
-            "Transaction is not in PENDING state: ${inquiryData.state}"
+            "Transaction not PENDING: ${inquiryData.state}"
         }
-
         if (expectedAmount != null) {
-            check(inquiryData.amount == expectedAmount) {
-                "Amount mismatch — expected: $expectedAmount, actual: ${inquiryData.amount}"
+            check(inquiryData.txnamount == expectedAmount) {
+                "Amount mismatch: expected=$expectedAmount, actual=${inquiryData.txnamount}"
             }
         }
-
         if (expectedCurrency != null) {
-            check(inquiryData.currency == expectedCurrency) {
-                "Currency mismatch — expected: $expectedCurrency, actual: ${inquiryData.currency}"
+            check(inquiryData.txncurrency == expectedCurrency) {
+                "Currency mismatch: expected=$expectedCurrency, actual=${inquiryData.txncurrency}"
             }
         }
 
-        // ⑤ صرف
+        // ④ cashout
         val cashoutData = ecommerceCashout(voucher, receiverMobile, purpose).getOrThrow()
-
-        check(cashoutData.state == "SUCCESS") {
-            "Cashout failed with state: ${cashoutData.state}"
-        }
-
+        check(cashoutData.state == "SUCCESS") { "Cashout failed: ${cashoutData.state}" }
         cashoutData
     }
 
-    // ─── إعادة المحاولة (مطابق لـ retry.max_attempts + status_codes) ──
+    // ─── Retry — مطابق لـ sendStructuredRequest() logic ─────
 
-    private suspend fun <T> executeWithRetry(
-        block: suspend (attempt: Int) -> T
-    ): Result<T> {
+    private suspend fun executeWithRetry(
+        serviceName: String,
+        domainName: String,
+        block: suspend () -> JawaliResponseBody
+    ): Result<JawaliResponseBody> {
         var lastException: Exception? = null
 
-        for (attempt in 0..maxRetryAttempts) {
+        for (attempt in 0 until MAX_RETRY) {
             try {
-                // تجديد التوكنات إذا منتهية
-                if (!isAccessTokenValid()) loginToSystem().getOrThrow()
-                if (!isWalletTokenValid()) walletAuthentication().getOrThrow()
-
-                return Result.success(block(attempt))
+                ensureValidTokens()
+                return Result.success(block())
             } catch (e: JawaliApiException) {
                 lastException = e
-                if (e.isRetryable && attempt < maxRetryAttempts) {
-                    // إعادة تسجيل الدخول + المصادقة
-                    invalidateTokens()
+                if (e.isRetryable && attempt < MAX_RETRY - 1) {
+                    refreshTokens()
                     continue
                 }
                 break
@@ -264,28 +275,52 @@ class JawaliTokenManager @Inject constructor(
                 break
             }
         }
-
         return Result.failure(lastException ?: Exception("فشل غير متوقع"))
+    }
+
+    // ─── ensureValidTokens — مطابق لـ ensureValidTokens() ───
+
+    private suspend fun ensureValidTokens() {
+        if (!hasAuthToken()) loginToSystem().getOrThrow()
+        if (!hasWalletToken()) walletAuthentication().getOrThrow()
+    }
+
+    // ─── refreshTokens — مطابق لـ refreshTokens() ───────────
+
+    private suspend fun refreshTokens() {
+        try {
+            invalidateTokens()
+            loginToSystem().getOrThrow()
+            walletAuthentication().getOrThrow()
+        } catch (_: Exception) { /* silent fail — matching PHP */ }
+    }
+
+    // ─── Token error detection — مطابق لـ tokenErrorKeywords ──
+
+    private fun isTokenError(response: JawaliStructuredResponse): Boolean {
+        val desc = (response.responseStatus?.systemStatusDesc ?: "").lowercase()
+        val descNative = (response.responseStatus?.systemStatusDescNative ?: "").lowercase()
+        val combined = "$desc $descNative"
+        val keywords = listOf("invalid access token", "expired", "unauthorized", "authentication failed", "token")
+        return keywords.any { combined.contains(it) }
     }
 
     // ─── مساعدات ─────────────────────────────────────────────
 
     fun invalidateTokens() {
-        accessToken = null
-        walletToken = null
-        accessTokenExpiresAt = 0
-        walletTokenExpiresAt = 0
+        accessToken = null; walletToken = null
+        accessTokenExpiresAt = 0; walletTokenExpiresAt = 0
     }
 
     fun getTokenStatus(): Map<String, Any?> = mapOf(
         "hasAccessToken" to (accessToken != null),
-        "accessTokenValid" to isAccessTokenValid(),
+        "accessTokenValid" to hasAuthToken(),
         "hasWalletToken" to (walletToken != null),
-        "walletTokenValid" to isWalletTokenValid()
+        "walletTokenValid" to hasWalletToken()
     )
 }
 
-// ─── استثناء مخصص (مطابق لـ JawaliApiException في الحزمة) ──
+// ─── JawaliApiException — مطابق لـ JawaliApiException.php ──
 
 class JawaliApiException(
     override val message: String,

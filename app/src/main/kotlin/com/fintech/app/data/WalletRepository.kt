@@ -162,7 +162,7 @@ class WalletRepository @Inject constructor(
         response.body ?: throw Exception("فشل جلب بيانات QR")
     }
 
-    // ─── Jawali Gateway (مطابق لـ JawaliService) ──────────
+    // ─── Jawali Gateway (مطابق لـ JawaliService.php) ────────
     // التدفق الرباعي: login → walletAuth → inquiry → cashout
 
     /**
@@ -173,8 +173,7 @@ class WalletRepository @Inject constructor(
         voucher: String,
         receiverMobile: String,
         purpose: String
-    ): Result<JawaliPayagData> {
-        // تأكد من تسجيل الدخول + مصادقة المحفظة أولاً
+    ): Result<JawaliResponseBody> {
         jawaliTokenManager.loginToSystem().getOrElse { return Result.failure(it) }
         jawaliTokenManager.walletAuthentication().getOrElse { return Result.failure(it) }
         return jawaliTokenManager.ecommerceInquiry(voucher, receiverMobile, purpose)
@@ -188,21 +187,21 @@ class WalletRepository @Inject constructor(
         voucher: String,
         receiverMobile: String,
         purpose: String
-    ): Result<JawaliPayagData> {
+    ): Result<JawaliResponseBody> {
         return jawaliTokenManager.ecommerceCashout(voucher, receiverMobile, purpose)
     }
 
     /**
-     * التدفق الكامل: login → walletAuth → inquiry → cashout
+     * التدفق الكامل: login → walletAuth → inquiry → verify → cashout
      * مطابق لـ processPayment() في وثائق جوالي
      */
     suspend fun jawaliProcessPayment(
         voucher: String,
         receiverMobile: String,
         purpose: String,
-        expectedAmount: Double? = null,
+        expectedAmount: String? = null,
         expectedCurrency: String? = null
-    ): Result<JawaliPayagData> {
+    ): Result<JawaliResponseBody> {
         return jawaliTokenManager.processFullPayment(
             voucher, receiverMobile, purpose, expectedAmount, expectedCurrency
         )
@@ -213,4 +212,5 @@ class WalletRepository @Inject constructor(
         api.updateFcmToken(FcmTokenRequest(token))
     }
 }
+
 
