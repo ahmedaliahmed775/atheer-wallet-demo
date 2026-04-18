@@ -285,8 +285,19 @@ data class TransactionDetailBody(
     val metadata: Map<String, Any>? = null,
     val timestamp: String
 )
-// ─── Jawali Gateway Models (مطابقة ١٠٠٪ للكود المصدري PHP) ──
+
+// ═══════════════════════════════════════════════════════════════
+// ─── Jawali Gateway Models — مطابقة لـ @alsharie/jawalijs ──
+// ═══════════════════════════════════════════════════════════════
+// مرجع: https://www.npmjs.com/package/@alsharie/jawalijs
 // مرجع: https://github.com/Alsharie/jawali-payment
+//
+// التعديلات المطبقة:
+// 1. JawaliResponseBody.accessToken → access_token (snake_case) ليطابق JS SDK
+// 2. إضافة org_value و org_name لاستجابة مصادقة المحفظة
+// 3. إضافة حقول استجابة الصرف: status, amount, balance, refId, IssuerRef, Currency
+//    (استجابة الصرف تختلف عن الاستعلام — انظر التعليقات أدناه)
+// ═══════════════════════════════════════════════════════════════
 
 // ═══ POST /oauth/token — OAuth2 Login ═══════════════════════
 // Content-Type: application/x-www-form-urlencoded (form-encoded)
@@ -379,22 +390,64 @@ data class JawaliStructuredResponse(
     fun getErrorMessage(): String? = responseStatus?.systemStatusDesc
 }
 
-// ── responseBody — حقول مطابقة لـ JawaliEcommerceInquiryResponse.php ──
+// ═══════════════════════════════════════════════════════════════
+// responseBody — حقول مطابقة لـ @alsharie/jawalijs + PHP SDK
+// ═══════════════════════════════════════════════════════════════
+//
+// ★ ملاحظة مهمة: استجابة الصرف تختلف عن استجابة الاستعلام!
+//
+// ┌─────────────────┬───────────────────────────┬───────────────────────────┐
+// │ العملية         │ حقل المبلغ                │ حقل الحالة                │
+// ├─────────────────┼───────────────────────────┼───────────────────────────┤
+// │ مصادقة المحفظة  │ —                         │ —                         │
+// │ استعلام (INQ)   │ txnamount                 │ state                     │
+// │ صرف (CASHOUT)   │ amount                    │ status                    │
+// └─────────────────┴───────────────────────────┴───────────────────────────┘
+//
+// التعديلات:
+// 1. accessToken → access_token (snake_case) — يطابق JS SDK:
+//    this.authHelper.setWalletToken(responseJson.responseBody.access_token)
+// 2. إضافة org_value و org_name — يطابق JawaliWalletAuthResponse.getOrgValue()/getOrgName()
+// 3. إضافة حقول الصرف: status, amount, balance, refId, IssuerRef, Currency
+//    - status    ← PHP: getStatue() → responseBody.status
+//    - amount    ← PHP: getAmount() → responseBody.amount
+//    - balance   ← PHP: getBalance() → responseBody.balance
+//    - refId     ← PHP: getTransactionRef() → responseBody.refId
+//    - IssuerRef ← PHP: getIssuerRef() → responseBody.IssuerRef (capital I)
+//    - Currency  ← JS:  getCurrency() → responseBody.Currency (capital C)
+// ═══════════════════════════════════════════════════════════════
 
 data class JawaliResponseBody(
-    // Wallet Auth
-    val accessToken: String? = null,
+    // ── PAYWA.WALLETAUTHENTICATION — مصادقة المحفظة ──
+    // ★ تعديل: access_token (snake_case) بدلاً من accessToken
+    @SerializedName("access_token") val accessToken: String? = null,
+    // ★ إضافة: org_value و org_name — مطابق لـ JawaliWalletAuthResponse
+    @SerializedName("org_value") val orgValue: String? = null,
+    @SerializedName("org_name") val orgName: String? = null,
+    // expiresIn يُستخدم في السيرفر المحاكي فقط (ليس في المواصفات الأصلية)
     val expiresIn: Int? = null,
-    // Inquiry / Cashout — مطابق لأسماء الحقول في PHP
-    val txnamount: String? = null,
-    val txncurrency: String? = null,
-    val state: String? = null,
-    val issuerTrxRef: String? = null,
-    val trxDate: String? = null,
-    val voucher: String? = null,
-    val receiverMobile: String? = null,
-    val purpose: String? = null,
-    val inquiryRef: String? = null
+
+    // ── PAYAG.ECOMMERCEINQUIRY — حقول الاستعلام ──
+    val txnamount: String? = null,          // مبلغ المعاملة (استعلام)
+    val txncurrency: String? = null,        // عملة المعاملة (استعلام)
+    val state: String? = null,              // حالة الاستعلام: "PENDING"
+    val issuerTrxRef: String? = null,       // مرجع مُصدر الاستعلام
+    val trxDate: String? = null,            // تاريخ المعاملة
+    val voucher: String? = null,            // رقم القسيمة (استعلام)
+    val receiverMobile: String? = null,     // رقم المستلم (استعلام)
+    val purpose: String? = null,            // الغرض (استعلام)
+    val inquiryRef: String? = null,         // مرجع الاستعلام
+
+    // ── PAYAG.ECOMMCASHOUT — حقول الصرف ──
+    // ★ إضافة: حقول الصرف المختلفة عن الاستعلام
+    val status: String? = null,             // ★ حالة الصرف: "SUCCESS" / "FAILED" (ليس state)
+    val amount: String? = null,             // ★ مبلغ الصرف (ليس txnamount)
+    val balance: String? = null,            // ★ رصيد المحفظة بعد الصرف
+    val refId: String? = null,              // ★ رقم مرجع الصرف
+    @SerializedName("IssuerRef")            // ★ حرف I كبير — مطابق PHP SDK
+    val issuerRef: String? = null,          // ★ مرجع مُصدر الصرف (ليس issuerTrxRef)
+    @SerializedName("Currency")             // ★ حرف C كبير — مطابق JS SDK
+    val currency: String? = null            // ★ عملة الصرف (ليس txncurrency)
 )
 
 // ── FCM ──
@@ -435,5 +488,3 @@ data class AppUiState(
     val jawaliInquiryResult: JawaliResponseBody? = null,
     val jawaliCashoutResult: JawaliResponseBody? = null
 )
-
-
