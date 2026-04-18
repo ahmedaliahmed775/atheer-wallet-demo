@@ -8,7 +8,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * مدير توكنات جوالي — مطابق ١٠٠٪ لـ JawaliService.php + TokenManager.php
+ * مدير توكنات جوالي — مطابق لـ @alsharie/jawalijs + JawaliService.php
+ * مرجع: https://www.npmjs.com/package/@alsharie/jawalijs
  * مرجع: https://github.com/Alsharie/jawali-payment
  *
  * يدير:
@@ -17,6 +18,16 @@ import javax.inject.Singleton
  * - بناء الـ Structured Payload (header + body) — مطابق لـ buildStructuredRequestPayload()
  * - إعادة المحاولة — مطابق لـ sendStructuredRequest() retry logic
  * - التدفق الرباعي:  login → walletAuth → inquiry → cashout
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * التعديلات المطبقة للتطابق مع @alsharie/jawalijs:
+ *
+ * 1. processFullPayment: التحقق من cashoutData.status بدلاً من cashoutData.state
+ *    (استجابة الصرف تستخدم "status" وليس "state" — مطابق لـ PHP SDK + JS SDK)
+ *
+ * 2. walletAuthentication: قراءة accessToken الذي يُخزّن كـ @SerializedName("access_token")
+ *    (Gson يربط JSON key "access_token" بالـ Kotlin property "accessToken" تلقائياً)
+ * ═══════════════════════════════════════════════════════════════
  */
 @Singleton
 class JawaliTokenManager @Inject constructor(
@@ -113,6 +124,10 @@ class JawaliTokenManager @Inject constructor(
     // ═══════════════════════════════════════════════════════════
     // ② walletAuthentication — مطابق لـ JawaliService::walletAuthentication()
     // Http::asJson()->withToken(accessToken)->post(baseUrl . '/v1/ws/callWS', payload)
+    //
+    // ★ Gson يربط JSON key "access_token" بالـ Kotlin property "accessToken"
+    //   عبر @SerializedName("access_token") في JawaliResponseBody
+    //   مطابق لـ JS SDK: this.authHelper.setWalletToken(responseJson.responseBody.access_token)
     // ═══════════════════════════════════════════════════════════
 
     suspend fun walletAuthentication(): Result<String> = runCatching {
@@ -132,11 +147,13 @@ class JawaliTokenManager @Inject constructor(
             throw Exception(response.getErrorMessage() ?: "فشل مصادقة المحفظة")
         }
 
+        // ★ accessToken هنا يقرأ JSON key "access_token" عبر @SerializedName
         val token = response.responseBody?.accessToken
             ?: throw Exception("لم يُرجع walletToken")
 
         walletToken = token
-        val expiresIn = response.responseBody.expiresIn ?: 1800
+        // expiresIn يُستخدم في السيرفر المحاكي فقط — الافتراضي 1800 ثانية
+        val expiresIn = response.responseBody?.expiresIn ?: 1800
         walletTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
 
         token
@@ -179,6 +196,14 @@ class JawaliTokenManager @Inject constructor(
 
     // ═══════════════════════════════════════════════════════════
     // ④ ecommerceCashout — مطابق لـ JawaliService::ecommerceCashout()
+    //
+    // ★ استجابة الصرف تستخدم حقولاً مختلفة عن الاستعلام:
+    //   - status بدلاً من state
+    //   - amount بدلاً من txnamount
+    //   - balance (إضافة)
+    //   - refId (إضافة)
+    //   - IssuerRef بدلاً من issuerTrxRef
+    //   - Currency بدلاً من txncurrency
     // ═══════════════════════════════════════════════════════════
 
     suspend fun ecommerceCashout(
@@ -214,6 +239,11 @@ class JawaliTokenManager @Inject constructor(
 
     // ═══════════════════════════════════════════════════════════
     // processFullPayment — مطابق لـ processPayment() في الوثائق
+    //
+    // ★ تعديل: التحقق من cashoutData.status بدلاً من cashoutData.state
+    //   استجابة الصرف تستخدم "status" (SUCCESS/FAILED) وليس "state"
+    //   مطابق لـ PHP SDK: getStatue() → responseBody.status
+    //   مطابق لـ JS SDK: ecommcaShout → responseBody.status
     // ═══════════════════════════════════════════════════════════
 
     suspend fun processFullPayment(
@@ -246,7 +276,11 @@ class JawaliTokenManager @Inject constructor(
 
         // ④ cashout
         val cashoutData = ecommerceCashout(voucher, receiverMobile, purpose).getOrThrow()
-        check(cashoutData.state == "SUCCESS") { "Cashout failed: ${cashoutData.state}" }
+
+        // ★ تعديل: التحقق من status بدلاً من state
+        // استجابة الصرف تستخدم حقل "status" (وليس "state")
+        check(cashoutData.status == "SUCCESS") { "Cashout failed: ${cashoutData.status}" }
+
         cashoutData
     }
 
