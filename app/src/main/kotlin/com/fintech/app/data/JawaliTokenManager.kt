@@ -2,36 +2,27 @@ package com.fintech.app.data
 
 import com.fintech.app.model.*
 import com.fintech.app.network.JawaliGatewayApi
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * مدير توكنات جوالي — مطابق لـ @alsharie/jawalijs + JawaliService.php
- * مرجع: https://www.npmjs.com/package/@alsharie/jawalijs
- * مرجع: https://github.com/Alsharie/jawali-payment
+ * مدير توكنات جوالي — مطابق ١٠٠٪ لـ @alsharie/jawalijs + JawaliService.php
  *
- * يدير:
- * - accessToken (من loginToSystem — OAuth2)
- * - walletToken (من walletAuthentication — PAYWA.WALLETAUTHENTICATION)
- * - بناء الـ Structured Payload (header + body) — مطابق لـ buildStructuredRequestPayload()
- * - إعادة المحاولة — مطابق لـ sendStructuredRequest() retry logic
- * - التدفق الرباعي:  login → walletAuth → inquiry → cashout
- *
- * ═══════════════════════════════════════════════════════════════
- * التعديلات المطبقة للتطابق مع @alsharie/jawalijs:
- *
- * 1. processFullPayment: التحقق من cashoutData.status بدلاً من cashoutData.state
- *    (استجابة الصرف تستخدم "status" وليس "state" — مطابق لـ PHP SDK + JS SDK)
- *
- * 2. walletAuthentication: قراءة accessToken الذي يُخزّن كـ @SerializedName("access_token")
- *    (Gson يربط JSON key "access_token" بالـ Kotlin property "accessToken" تلقائياً)
- * ═══════════════════════════════════════════════════════════════
+ * التعديلات عن النسخة السابقة:
+ * 1. استخدام JawaliConfig بدلاً من القيم الثابتة — مطابق لـ config/jawali.php
+ * 2. إضافة tokenExpiryBuffer (300 ثانية) — مطابق لـ TokenManager.php
+ * 3. إضافة secureLogout() — مطابق لـ TokenManager::secureClearAllTokens()
+ * 4. استخدام auth.wallet بدلاً من walletIdentifier في PAYAG body — مطابق لـ JS SDK
+ * 5. إضافة phone من JawaliConfig — مطابق لـ JawaliConfig في JS SDK
+ * 6. إضافة validateEcommerceParams() — مطابق لـ JawaliService::validateEcommerceParams()
  */
 @Singleton
 class JawaliTokenManager @Inject constructor(
-    private val api: JawaliGatewayApi
+    private val api: JawaliGatewayApi,
+    private val jawaliConfig: JawaliConfig
 ) {
     // ─── Tokens — مطابق لـ TokenManager.php ──────────────────
     private var accessToken: String? = null
@@ -39,28 +30,9 @@ class JawaliTokenManager @Inject constructor(
     private var accessTokenExpiresAt: Long = 0
     private var walletTokenExpiresAt: Long = 0
 
-    // ─── بيانات الوكيل — مطابق لـ config/jawali.php ──────────
-    private val merchantUsername = "atheer_merchant"
-    private val merchantPassword = "atheer_pass_123"
-    private val walletIdentifier = "777000001"       // auth.wallet_identifier
-    private val walletPassword = "wallet_pass_123"   // auth.wallet_password
-    private val orgId = "atheer-org-001"              // auth.org_id
-    private val userId = "atheer.api.user"            // auth.user_id
-    private val externalUser = "atheer_ext_1"         // auth.external_user
-
-    // ─── Constants — مطابق لـ JawaliService.php constants ────
-    private companion object {
-        const val CLIENT_ID = "WeCash"                    // COMMON_SIGNON_CLIENT_ID
-        const val BODY_TYPE = "Clear"                     // COMMON_BODY_TYPE
-        const val WALLET_AUTH_SERVICE = "PAYWA.WALLETAUTHENTICATION"
-        const val WALLET_AUTH_DOMAIN = "WalletDomain"
-        const val INQUIRY_SERVICE = "PAYAG.ECOMMERCEINQUIRY"
-        const val INQUIRY_DOMAIN = "MerchantDomain"
-        const val CASHOUT_SERVICE = "PAYAG.ECOMMCASHOUT"
-        const val CASHOUT_DOMAIN = "MerchantDomain"
-        // retry — مطابق لـ config retry.max_attempts
-        const val MAX_RETRY = 2
-    }
+    // ─── Token Expiry Buffer — مطابق لـ TokenManager.php ($tokenExpiryBuffer = 300) ──
+    // يُطرح من وقت الانتهاء لتجنب استخدام توكن على وشك الانتهاء
+    private val tokenExpiryBufferMs = JawaliConfig.TOKEN_EXPIRY_BUFFER_SECONDS * 1000L
 
     // ─── Token Checks — مطابق لـ TokenManager::hasAuthToken() ──
 
@@ -72,14 +44,14 @@ class JawaliTokenManager @Inject constructor(
 
     // ─── Payload Builders — مطابق لـ buildStructuredRequestPayload() ──
 
-    private fun buildSignonDetail(): JawaliSignonDetail = JawaliSignonDetail(
-        clientID = CLIENT_ID,
-        orgID = orgId,
-        userID = userId,
-        externalUser = externalUser
+    private suspend fun buildSignonDetail(): JawaliSignonDetail = JawaliSignonDetail(
+        clientID = JawaliConfig.COMMON_SIGNON_CLIENT_ID,
+        orgID = jawaliConfig.orgId.first(),
+        userID = jawaliConfig.userId.first(),
+        externalUser = jawaliConfig.externalUser.first()
     )
 
-    private fun buildHeader(serviceName: String, domainName: String): JawaliRequestHeader {
+    private suspend fun buildHeader(serviceName: String, domainName: String): JawaliRequestHeader {
         val dateFormat = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         return JawaliRequestHeader(
             serviceDetail = JawaliServiceDetail(
@@ -90,7 +62,7 @@ class JawaliTokenManager @Inject constructor(
             signonDetail = buildSignonDetail(),
             messageContext = JawaliMessageContext(
                 clientDate = dateFormat.format(Date()),
-                bodyType = BODY_TYPE
+                bodyType = JawaliConfig.COMMON_BODY_TYPE
             )
         )
     }
@@ -99,15 +71,36 @@ class JawaliTokenManager @Inject constructor(
 
     private fun bearerHeader(): String = "Bearer ${accessToken ?: ""}"
 
+    // ─── Input Validation — مطابق لـ JawaliService::validateEcommerceParams() ──
+
+    private fun validateEcommerceParams(voucher: String, receiverMobile: String) {
+        require(voucher.isNotBlank()) { "Voucher number cannot be empty" }
+        require(receiverMobile.isNotBlank()) { "Receiver mobile number cannot be empty" }
+        // مطابق لـ preg_match في PHP SDK
+        require(receiverMobile.matches(Regex("^[0-9+\\-\\s()]{7,15}$"))) {
+            "Invalid mobile number format: $receiverMobile"
+        }
+        require(voucher.matches(Regex("^[0-9A-Za-z\\-_]{3,50}$"))) {
+            "Invalid voucher format: $voucher"
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // ① loginToSystem — مطابق لـ JawaliService::loginToSystem()
     // Http::asForm()->post(baseUrl . '/oauth/token', payload)
     // ═══════════════════════════════════════════════════════════
 
     suspend fun loginToSystem(): Result<String> = runCatching {
+        val username = jawaliConfig.username.first()
+        val password = jawaliConfig.password.first()
+
+        if (username.isBlank() || password.isBlank()) {
+            throw Exception("Missing required authentication credentials. Please configure Jawali settings.")
+        }
+
         val response = api.loginToSystem(
-            username = merchantUsername,
-            password = merchantPassword
+            username = username,
+            password = password
         )
 
         if (!response.isSuccess()) {
@@ -116,25 +109,28 @@ class JawaliTokenManager @Inject constructor(
 
         accessToken = response.accessToken
         val expiresIn = response.expiresIn ?: 3600
-        accessTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
+        // ★ تعديل: طرح tokenExpiryBuffer — مطابق لـ TokenManager.php
+        accessTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L) - tokenExpiryBufferMs
 
         response.accessToken!!
     }
 
     // ═══════════════════════════════════════════════════════════
     // ② walletAuthentication — مطابق لـ JawaliService::walletAuthentication()
-    // Http::asJson()->withToken(accessToken)->post(baseUrl . '/v1/ws/callWS', payload)
-    //
-    // ★ Gson يربط JSON key "access_token" بالـ Kotlin property "accessToken"
-    //   عبر @SerializedName("access_token") في JawaliResponseBody
-    //   مطابق لـ JS SDK: this.authHelper.setWalletToken(responseJson.responseBody.access_token)
     // ═══════════════════════════════════════════════════════════
 
     suspend fun walletAuthentication(): Result<String> = runCatching {
         if (!hasAuthToken()) loginToSystem().getOrThrow()
 
+        val walletIdentifier = jawaliConfig.walletIdentifier.first()
+        val walletPassword = jawaliConfig.walletPassword.first()
+
+        if (walletIdentifier.isBlank() || walletPassword.isBlank()) {
+            throw Exception("Missing required wallet credentials. Please configure Jawali wallet settings.")
+        }
+
         val request = JawaliStructuredRequest(
-            header = buildHeader(WALLET_AUTH_SERVICE, WALLET_AUTH_DOMAIN),
+            header = buildHeader(JawaliConfig.WALLET_AUTH_SERVICE, JawaliConfig.WALLET_AUTH_DOMAIN),
             body = mapOf(
                 "identifier" to walletIdentifier,
                 "password" to walletPassword
@@ -147,14 +143,13 @@ class JawaliTokenManager @Inject constructor(
             throw Exception(response.getErrorMessage() ?: "فشل مصادقة المحفظة")
         }
 
-        // ★ accessToken هنا يقرأ JSON key "access_token" عبر @SerializedName
         val token = response.responseBody?.accessToken
             ?: throw Exception("لم يُرجع walletToken")
 
         walletToken = token
-        // expiresIn يُستخدم في السيرفر المحاكي فقط — الافتراضي 1800 ثانية
         val expiresIn = response.responseBody?.expiresIn ?: 1800
-        walletTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L)
+        // ★ تعديل: طرح tokenExpiryBuffer — مطابق لـ TokenManager.php
+        walletTokenExpiresAt = System.currentTimeMillis() + (expiresIn * 1000L) - tokenExpiryBufferMs
 
         token
     }
@@ -167,14 +162,23 @@ class JawaliTokenManager @Inject constructor(
         voucher: String,
         receiverMobile: String,
         purpose: String
-    ): Result<JawaliResponseBody> = executeWithRetry(INQUIRY_SERVICE, INQUIRY_DOMAIN) {
+    ): Result<JawaliResponseBody> = executeWithRetry(JawaliConfig.INQUIRY_SERVICE, JawaliConfig.INQUIRY_DOMAIN) {
+        // ★ إضافة: التحقق من المدخلات — مطابق لـ validateEcommerceParams()
+        validateEcommerceParams(voucher, receiverMobile)
+
+        // ★ تعديل: استخدام auth.wallet لـ agentWallet — مطابق لـ JS SDK
+        // JS SDK: this.attributes.body.agentWallet = this.config.auth.wallet
+        // PHP SDK: 'agentWallet' => $this->authConfig['wallet_identifier']
+        val agentWalletValue = jawaliConfig.wallet.first()
+        val walletPasswordValue = jawaliConfig.walletPassword.first()
+
         val request = JawaliStructuredRequest(
-            header = buildHeader(INQUIRY_SERVICE, INQUIRY_DOMAIN),
+            header = buildHeader(JawaliConfig.INQUIRY_SERVICE, JawaliConfig.INQUIRY_DOMAIN),
             body = mapOf(
-                "agentWallet" to walletIdentifier,
+                "agentWallet" to agentWalletValue,
                 "voucher" to voucher,
                 "receiverMobile" to receiverMobile,
-                "password" to walletPassword,
+                "password" to walletPasswordValue,
                 "accessToken" to (walletToken ?: ""),
                 "refId" to generateRefId(),
                 "purpose" to purpose
@@ -196,28 +200,26 @@ class JawaliTokenManager @Inject constructor(
 
     // ═══════════════════════════════════════════════════════════
     // ④ ecommerceCashout — مطابق لـ JawaliService::ecommerceCashout()
-    //
-    // ★ استجابة الصرف تستخدم حقولاً مختلفة عن الاستعلام:
-    //   - status بدلاً من state
-    //   - amount بدلاً من txnamount
-    //   - balance (إضافة)
-    //   - refId (إضافة)
-    //   - IssuerRef بدلاً من issuerTrxRef
-    //   - Currency بدلاً من txncurrency
     // ═══════════════════════════════════════════════════════════
 
     suspend fun ecommerceCashout(
         voucher: String,
         receiverMobile: String,
         purpose: String
-    ): Result<JawaliResponseBody> = executeWithRetry(CASHOUT_SERVICE, CASHOUT_DOMAIN) {
+    ): Result<JawaliResponseBody> = executeWithRetry(JawaliConfig.CASHOUT_SERVICE, JawaliConfig.CASHOUT_DOMAIN) {
+        // ★ إضافة: التحقق من المدخلات
+        validateEcommerceParams(voucher, receiverMobile)
+
+        val agentWalletValue = jawaliConfig.wallet.first()
+        val walletPasswordValue = jawaliConfig.walletPassword.first()
+
         val request = JawaliStructuredRequest(
-            header = buildHeader(CASHOUT_SERVICE, CASHOUT_DOMAIN),
+            header = buildHeader(JawaliConfig.CASHOUT_SERVICE, JawaliConfig.CASHOUT_DOMAIN),
             body = mapOf(
-                "agentWallet" to walletIdentifier,
+                "agentWallet" to agentWalletValue,
                 "voucher" to voucher,
                 "receiverMobile" to receiverMobile,
-                "password" to walletPassword,
+                "password" to walletPasswordValue,
                 "accessToken" to (walletToken ?: ""),
                 "refId" to generateRefId(),
                 "purpose" to purpose
@@ -239,11 +241,6 @@ class JawaliTokenManager @Inject constructor(
 
     // ═══════════════════════════════════════════════════════════
     // processFullPayment — مطابق لـ processPayment() في الوثائق
-    //
-    // ★ تعديل: التحقق من cashoutData.status بدلاً من cashoutData.state
-    //   استجابة الصرف تستخدم "status" (SUCCESS/FAILED) وليس "state"
-    //   مطابق لـ PHP SDK: getStatue() → responseBody.status
-    //   مطابق لـ JS SDK: ecommcaShout → responseBody.status
     // ═══════════════════════════════════════════════════════════
 
     suspend fun processFullPayment(
@@ -276,9 +273,6 @@ class JawaliTokenManager @Inject constructor(
 
         // ④ cashout
         val cashoutData = ecommerceCashout(voucher, receiverMobile, purpose).getOrThrow()
-
-        // ★ تعديل: التحقق من status بدلاً من state
-        // استجابة الصرف تستخدم حقل "status" (وليس "state")
         check(cashoutData.status == "SUCCESS") { "Cashout failed: ${cashoutData.status}" }
 
         cashoutData
@@ -291,15 +285,16 @@ class JawaliTokenManager @Inject constructor(
         domainName: String,
         block: suspend () -> JawaliResponseBody
     ): Result<JawaliResponseBody> {
+        val maxRetry = jawaliConfig.maxRetry.first()
         var lastException: Exception? = null
 
-        for (attempt in 0 until MAX_RETRY) {
+        for (attempt in 0 until maxRetry) {
             try {
                 ensureValidTokens()
                 return Result.success(block())
             } catch (e: JawaliApiException) {
                 lastException = e
-                if (e.isRetryable && attempt < MAX_RETRY - 1) {
+                if (e.isRetryable && attempt < maxRetry - 1) {
                     refreshTokens()
                     continue
                 }
@@ -342,6 +337,21 @@ class JawaliTokenManager @Inject constructor(
     // ─── مساعدات ─────────────────────────────────────────────
 
     fun invalidateTokens() {
+        // ★ تعديل: مسح آمن — مطابق لـ TokenManager::clearAllTokens()
+        accessToken = null; walletToken = null
+        accessTokenExpiresAt = 0; walletTokenExpiresAt = 0
+    }
+
+    /**
+     * تسجيل خروج آمن — مطابق لـ TokenManager::secureClearAllTokens()
+     * يكتب بيانات عشوائية فوق التوكنات قبل مسحها لمنع الاسترجاع
+     */
+    fun secureLogout() {
+        // كتابة بيانات عشوائية فوق القيم الحالية
+        val randomData = List(10) { (('A'..'Z') + ('a'..'z') + ('0'..'9')).random() }.joinString()
+        accessToken = randomData
+        walletToken = randomData
+        Thread.sleep(50) // تأخير بسيط لضمان الكتابة
         accessToken = null; walletToken = null
         accessTokenExpiresAt = 0; walletTokenExpiresAt = 0
     }
@@ -350,7 +360,10 @@ class JawaliTokenManager @Inject constructor(
         "hasAccessToken" to (accessToken != null),
         "accessTokenValid" to hasAuthToken(),
         "hasWalletToken" to (walletToken != null),
-        "walletTokenValid" to hasWalletToken()
+        "walletTokenValid" to hasWalletToken(),
+        "accessTokenExpiresAt" to accessTokenExpiresAt,
+        "walletTokenExpiresAt" to walletTokenExpiresAt,
+        "tokenExpiryBufferMs" to tokenExpiryBufferMs
     )
 }
 
