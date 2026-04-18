@@ -323,8 +323,11 @@ class FinTechViewModel @Inject constructor(
 
     // ─── Merchant ─────────────────────────────────────────
 
-    // ─── Jawali Gateway (مطابق لـ JawaliService.php) ────────
+    // ─── Jawali Gateway (مطابق لـ @alsharie/jawalijs) ────────
     // التدفق: login → walletAuth → inquiry(PENDING) → cashout(SUCCESS)
+    //
+    // ★ تعديل: عرض حقول الصرف الصحيحة (status, amount, Currency)
+    //   بدلاً من حقول الاستعلام (state, txnamount, txncurrency)
 
     /**
      * استعلام جوالي: login → walletAuth → PAYAG.ECOMMERCEINQUIRY
@@ -343,6 +346,7 @@ class FinTechViewModel @Inject constructor(
                         it.copy(
                             isLoading           = false,
                             jawaliInquiryResult = data,
+                            // الاستعلام يستخدم: state, txnamount, txncurrency, issuerTrxRef
                             successMessage      = "تم الاستعلام — حالة: ${data.state} — المرجع: ${data.issuerTrxRef}",
                             error               = null
                         )
@@ -355,6 +359,9 @@ class FinTechViewModel @Inject constructor(
     /**
      * صرف جوالي: PAYAG.ECOMMCASHOUT — يجب أن يسبقه inquiry ناجح
      * مطابق لـ Jawali::ecommerceCashout()
+     *
+     * ★ تعديل: عرض حقول الصرف (status, amount, Currency, balance, IssuerRef)
+     *   بدلاً من حقول الاستعلام (state, txnamount, txncurrency)
      */
     fun jawaliCashout(voucher: String, receiverMobile: String, purpose: String) {
         viewModelScope.launch {
@@ -366,7 +373,8 @@ class FinTechViewModel @Inject constructor(
                             isLoading            = false,
                             jawaliCashoutResult  = data,
                             jawaliInquiryResult  = null,
-                            successMessage       = "تم الصرف بنجاح ✅ — ${data.txnamount} ${data.txncurrency}",
+                            // ★ الصرف يستخدم: status, amount, Currency, balance, IssuerRef
+                            successMessage       = "تم الصرف بنجاح — ${data.amount ?: data.txnamount} ${data.currency ?: data.txncurrency} — رصيدك: ${data.balance}",
                             error                = null
                         )
                     }
@@ -379,6 +387,8 @@ class FinTechViewModel @Inject constructor(
     /**
      * التدفق الكامل: login → walletAuth → inquiry → verify → cashout
      * مطابق لـ processPayment() في وثائق جوالي
+     *
+     * ★ تعديل: عرض حقول الصرف الصحيحة
      */
     fun jawaliProcessPayment(
         voucher: String,
@@ -402,7 +412,8 @@ class FinTechViewModel @Inject constructor(
                         it.copy(
                             isLoading           = false,
                             jawaliCashoutResult = data,
-                            successMessage      = "تم الدفع عبر جوالي ✅ — ${data.txnamount} ${data.txncurrency}",
+                            // ★ الصرف يستخدم: amount, Currency, balance, status, IssuerRef
+                            successMessage      = "تم الدفع عبر جوالي — ${data.amount ?: data.txnamount} ${data.currency ?: data.txncurrency} — رصيدك: ${data.balance}",
                             error               = null
                         )
                     }
@@ -441,6 +452,3 @@ class FinTechViewModel @Inject constructor(
     private fun setLoading(v: Boolean) = _uiState.update { it.copy(isLoading = v, error = null) }
     private fun setError(msg: String)  = _uiState.update { it.copy(isLoading = false, error = msg) }
 }
-
-
-
